@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import WidgetKit
 
 enum RefreshError: LocalizedError {
     case stage(String, Error)
@@ -39,6 +40,7 @@ final class AppStore: ObservableObject {
     let alarmEngine: AlarmEngine
     var client: NightscoutClient
     private(set) var lastRefresh = Date.distantPast
+    private let sharedStore = SharedStore()
 
     /// Data older than this is considered stale and worth refetching.
     var isStale: Bool { Date().timeIntervalSince(lastRefresh) > 60 }
@@ -87,6 +89,7 @@ final class AppStore: ObservableObject {
     func setDisplayUnits(_ units: GlucoseUnits) {
         displayUnits = units
         UserDefaults.standard.set(units.rawValue, forKey: "display.glucoseUnits")
+        updateSharedSnapshot()
     }
 
     private static func loadDisplayUnits() -> GlucoseUnits {
@@ -168,6 +171,44 @@ final class AppStore: ObservableObject {
             alarmEngine.schedule(.connectionLost)
             throw firstError
         }
+
+        updateSharedSnapshot()
+    }
+
+    /// Mirror the latest reading + display config into the App Group for the widget.
+    func updateSharedSnapshot() {
+        sharedStore.saveConfig(DisplayConfig(units: displayUnits, thresholds: thresholds))
+        guard let latest = readings.first else { return }
+        let delta = readings.count >= 2 ? latest.mgdl - readings[1].mgdl : nil
+        let snap = GlucoseSnapshot(
+            mgdl: latest.mgdl, trend: latest.trend, delta: delta, date: latest.date,
+            iob: loopStatus?.iob, cob: loopStatus?.cob
+        )
+        sharedStore.saveSnapshot(snap)
+        WidgetCenter.shared.reloadAllTimelines()
+
+        if #available(iOS 16.1, *), let latest = readings.first {
+            LiveActivityController.shared.update(
+                GlucoseActivityAttributes.ContentState(
+                    mgdl: latest.mgdl, trendRaw: latest.trend.rawValue,
+                    delta: readings.count >= 2 ? latest.mgdl - readings[1].mgdl : nil,
+                    date: latest.date, iob: loopStatus?.iob, unitsRaw: displayUnits.rawValue
+                )
+            )
+        }
+    }
+
+    @available(iOS 16.1, *)
+    func setLiveActivityEnabled(_ on: Bool) {
+        guard on else { LiveActivityController.shared.stop(); return }
+        guard let latest = readings.first else { return }
+        LiveActivityController.shared.start(
+            with: GlucoseActivityAttributes.ContentState(
+                mgdl: latest.mgdl, trendRaw: latest.trend.rawValue,
+                delta: readings.count >= 2 ? latest.mgdl - readings[1].mgdl : nil,
+                date: latest.date, iob: loopStatus?.iob, unitsRaw: displayUnits.rawValue
+            )
+        )
     }
 
     private func evaluateAlarms() {

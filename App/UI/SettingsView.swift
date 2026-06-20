@@ -1,4 +1,5 @@
 import SwiftUI
+import WidgetKit
 
 struct SettingsView: View {
     @ObservedObject var store: AppStore
@@ -13,6 +14,7 @@ struct SettingsView: View {
     @State private var staleMinutes: String
     @State private var testingConnection = false
     @State private var connectionResult: String?
+    @State private var liveActivityOn = false
 
     private let keychain = KeychainStore(service: "org.diy.aapsclient")
 
@@ -71,6 +73,15 @@ struct SettingsView: View {
             } label: {
                 Text("Profile")
             }
+
+            if #available(iOS 16.1, *) {
+                Section {
+                    Toggle(String(localized: "settings.live_activity"), isOn: $liveActivityOn)
+                        .onChange(of: liveActivityOn) { on in store.setLiveActivityEnabled(on) }
+                } footer: {
+                    Text(String(localized: "settings.live_activity_caption"))
+                }
+            }
         }
         .navigationTitle("settings.title")
         .onAppear { loadSettings() }
@@ -109,6 +120,13 @@ struct SettingsView: View {
         }
         try? keychain.set(url.absoluteString, for: .nsUrl)
         try? keychain.set(accessToken.trimmingCharacters(in: .whitespacesAndNewlines), for: .nsAccessToken)
+
+        let sharedKeychain = KeychainStore(
+            service: SharedConstants.keychainService,
+            accessGroup: SharedConstants.keychainAccessGroup
+        )
+        try? keychain.migrate(to: sharedKeychain)
+        WidgetCenter.shared.reloadAllTimelines()
 
         let token = accessToken.trimmingCharacters(in: .whitespacesAndNewlines)
         Task {

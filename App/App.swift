@@ -13,6 +13,11 @@ struct AAPSClientApp: App {
 
     init() {
         let keychain = KeychainStore(service: "org.diy.aapsclient")
+        let sharedKeychain = KeychainStore(
+            service: SharedConstants.keychainService,
+            accessGroup: SharedConstants.keychainAccessGroup
+        )
+        try? keychain.migrate(to: sharedKeychain)
         let nsUrl = ((try? keychain.get(.nsUrl)) ?? nil).flatMap(AppStore.normalizedURL)
         let accessToken = (try? keychain.get(.nsAccessToken)) ?? ""
 
@@ -28,6 +33,11 @@ struct AAPSClientApp: App {
         _store = StateObject(wrappedValue: store)
         writer = NsTreatmentWriterLive(client: client)
         bgScheduler = BackgroundScheduler(store: store)
+        // BGTaskScheduler launch handlers MUST be registered before the app finishes
+        // launching. Registering from a SwiftUI `.task` (post-launch) throws an
+        // uncaught NSException ("All launch handlers must be registered before
+        // application finishes launching") on iOS 16/18 and Mac alike.
+        bgScheduler.register()
     }
 
     var body: some Scene {
@@ -54,7 +64,6 @@ struct AAPSClientApp: App {
                 .tabItem { Label("Statistics", systemImage: "chart.bar") }
             }
             .task {
-                bgScheduler.register()
                 bgScheduler.schedule()
                 try? await UNUserNotificationCenter.current()
                     .requestAuthorization(options: [.alert, .sound, .badge])
@@ -77,14 +86,4 @@ final class UnconfiguredClient: NightscoutClient {
     func fetchProfile() async throws -> NsProfile { throw NsError.badURL }
     func fetchProfileStore() async throws -> NsProfileStore { throw NsError.badURL }
     func postTreatment(_ payload: [String: Any]) async throws { throw NsError.badURL }
-}
-
-final class URLSessionTransport: HttpTransport {
-    func execute(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw NsError.noNetwork
-        }
-        return (data, httpResponse)
-    }
 }

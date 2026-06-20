@@ -51,3 +51,26 @@
 "tab.home" = "Home";
 "tab.history" = "History";
 "tab.settings" = "Settings";
+
+"edit.basal" = "Basal (U/h)";
+"edit.isf" = "ISF";
+"edit.ic" = "IC (g/U)";
+"edit.target_low" = "Target Low";
+"edit.target_high" = "Target High";
+"edit.permanent" = "Permanent";
+"edit.duration_min" = "Duration (min)";
+"edit.title" = "Edit %@";
+"edit.save" = "Save";
+"edit.apply_title" = "Apply profile edits?";
+"edit.apply" = "Apply";
+"edit.no_changes" = "No changes";
+"edit.applied_permanent" = "Profile applied permanently";
+"edit.applied_temporary" = "Profile applied for %dm";
+"edit.hint_accept_switch" = "Requires NsClientAcceptProfileSwitch enabled on the master.";
+"edit.add_block" = "Add Block";
+"edit.add_block_title" = "New Block";
+"edit.block_time" = "Time";
+"edit.block_value" = "Value";
+"edit.duplicate_time" = "A block already exists at this time";
+"settings.live_activity" = "Live Activity";
+"settings.live_activity_caption" = "Updates while the app is open or refreshing in the background. Without a push server it will not update when the app is fully closed.";

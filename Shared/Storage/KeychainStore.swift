@@ -80,6 +80,20 @@ final class KeychainStore {
         }
         return query
     }
+
+    /// Copy all keychain values from this store into `destination`, then delete
+    /// them here. Idempotent: missing values are skipped. Used once at launch to
+    /// move credentials from the app's default group into the shared access group
+    /// so the widget extension can read them.
+    func migrate(to destination: KeychainStore) throws {
+        for key in KeychainKey.allCases {
+            guard let value = try get(key) else { continue }
+            try destination.set(value, for: key)
+            if destination !== self {
+                try delete(key)
+            }
+        }
+    }
 }
 
 enum KeychainError: Error {

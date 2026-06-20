@@ -51,3 +51,26 @@
 "tab.home" = "Главная";
 "tab.history" = "История";
 "tab.settings" = "Настройки";
+
+"edit.basal" = "Базал (Ед/ч)";
+"edit.isf" = "ISF";
+"edit.ic" = "IC (г/Ед)";
+"edit.target_low" = "Нижняя цель";
+"edit.target_high" = "Верхняя цель";
+"edit.permanent" = "Постоянно";
+"edit.duration_min" = "Длительность (мин)";
+"edit.title" = "Правка %@";
+"edit.save" = "Сохранить";
+"edit.apply_title" = "Применить правки профиля?";
+"edit.apply" = "Применить";
+"edit.no_changes" = "Нет изменений";
+"edit.applied_permanent" = "Профиль применён постоянно";
+"edit.applied_temporary" = "Профиль применён на %d мин";
+"edit.hint_accept_switch" = "Требуется включённая настройка NsClientAcceptProfileSwitch на мастере.";
+"edit.add_block" = "Добавить блок";
+"edit.add_block_title" = "Новый блок";
+"edit.block_time" = "Время";
+"edit.block_value" = "Значение";
+"edit.duplicate_time" = "Блок с этим временем уже существует";
+"settings.live_activity" = "Live Activity";
+"settings.live_activity_caption" = "Обновляется, пока приложение открыто или обновляется в фоне. Без push-сервера не обновляется, когда приложение полностью закрыто.";

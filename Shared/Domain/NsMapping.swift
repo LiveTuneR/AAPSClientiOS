@@ -92,7 +92,10 @@ enum NsMapping {
               let prof = store[defaultName] as? [String: Any] else {
             throw NsError.decoding("No default profile found")
         }
+        return parseProfileObject(prof)
+    }
 
+    static func parseProfileObject(_ prof: [String: Any]) -> NsProfile {
         func schedule(_ key: String) -> [(Int, Double)] {
             (prof[key] as? [[String: Any]])?.compactMap {
                 guard let t = intVal($0["timeAsSeconds"]), let v = num($0["value"]) else { return nil }
@@ -101,7 +104,7 @@ enum NsMapping {
         }
 
         return NsProfile(
-            units: GlucoseUnits(rawValue: (prof["units"] as? String) ?? "mg/dl") ?? .mgdl,
+            units: GlucoseUnits(nsUnits: prof["units"] as? String),
             dia: num(prof["dia"]),
             basal: schedule("basal").map { BasalEntry(startSeconds: $0.0, rate: $0.1) },
             targetLow: schedule("target_low").map { ScheduledValue(startSeconds: $0.0, value: $0.1) },

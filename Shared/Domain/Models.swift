@@ -11,6 +11,13 @@ enum GlucoseClassification {
 enum GlucoseUnits: String, Codable {
     case mgdl = "mg/dl"
     case mmol = "mmol/l"
+
+    /// Lenient parse of a Nightscout/AAPS units string. Profiles commonly use
+    /// "mmol", "mmol/L", or "mmol/l" — the strict rawValue only matches "mmol/l",
+    /// so anything containing "mmol" maps to .mmol, everything else to .mgdl.
+    init(nsUnits: String?) {
+        self = (nsUnits?.lowercased().contains("mmol") == true) ? .mmol : .mgdl
+    }
 }
 
 struct GlucoseReading: Equatable, Identifiable {
@@ -90,7 +97,13 @@ struct ScheduledValue: Equatable {
     let value: Double
 }
 
-struct AlarmThresholds: Equatable {
+struct EditableBlock: Identifiable {
+    let id = UUID()
+    var startSeconds: Int
+    var valueString: String
+}
+
+struct AlarmThresholds: Equatable, Codable {
     let urgentLow: Int
     let low: Int
     let high: Int
@@ -146,4 +159,9 @@ enum NsError: LocalizedError {
         case .server(let c):  return String(format: String(localized: "error.server"), c)
         }
     }
+}
+
+func convertUnit(value: Double, from: GlucoseUnits, to: GlucoseUnits) -> Double {
+    if from == to { return value }
+    return from == .mgdl ? value / 18.0182 : value * 18.0182
 }
