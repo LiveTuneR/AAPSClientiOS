@@ -15,6 +15,15 @@ final class AudioKeepAlive {
     private var timer: Timer?
     private var started = false
 
+    /// BackgroundTasks-style guard: the audio keep-alive only makes sense on iOS,
+    /// where the app gets suspended in the background. On Mac ("Designed for iPad")
+    /// there is nothing to keep alive, so skip the audio session entirely.
+    let isAudioKeepAliveEnabled: Bool
+
+    init(isRunningOnMac: Bool = ProcessInfo.processInfo.isiOSAppOnMac) {
+        self.isAudioKeepAliveEnabled = !isRunningOnMac
+    }
+
     /// Call when the app becomes active. Safe to call repeatedly.
     func start(onTick: @escaping () -> Void) {
         startEngine()
@@ -22,7 +31,7 @@ final class AudioKeepAlive {
     }
 
     private func startEngine() {
-        guard !engine.isRunning else { return }
+        guard isAudioKeepAliveEnabled, !engine.isRunning else { return }
         do {
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(.playback, options: [.mixWithOthers])
