@@ -81,17 +81,19 @@ final class KeychainStore {
         return query
     }
 
-    /// Copy all keychain values from this store into `destination`, then delete
-    /// them here. Idempotent: missing values are skipped. Used once at launch to
-    /// move credentials from the app's default group into the shared access group
-    /// so the widget extension can read them.
+    /// Copy all keychain values from this store into `destination` (copy-only;
+    /// the source is left intact). Idempotent: missing values are skipped and
+    /// existing destination values are overwritten. Used once at launch to seed
+    /// the shared access group from the app's legacy default group so the widget
+    /// extension can read credentials.
+    ///
+    /// NB: do NOT delete from the source here. A delete on a nil-access-group
+    /// store spans every access group the app belongs to (SecItemDelete matches
+    /// across all of them), which would also wipe the freshly written shared copy.
     func migrate(to destination: KeychainStore) throws {
         for key in KeychainKey.allCases {
             guard let value = try get(key) else { continue }
             try destination.set(value, for: key)
-            if destination !== self {
-                try delete(key)
-            }
         }
     }
 }

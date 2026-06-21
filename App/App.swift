@@ -12,12 +12,10 @@ struct AAPSClientApp: App {
     private let keepAlive = AudioKeepAlive()
 
     init() {
-        let keychain = KeychainStore(service: "org.diy.aapsclient")
-        let sharedKeychain = KeychainStore(
-            service: SharedConstants.keychainService,
-            accessGroup: SharedConstants.keychainAccessGroup
-        )
-        try? keychain.migrate(to: sharedKeychain)
+        // Credentials live on the shared keychain group so the widget can read
+        // them. Seed it once from the legacy default-group location (copy-only).
+        let keychain = SharedConstants.credentialKeychain()
+        try? SharedConstants.legacyKeychain().migrate(to: keychain)
         let nsUrl = ((try? keychain.get(.nsUrl)) ?? nil).flatMap(AppStore.normalizedURL)
         let accessToken = (try? keychain.get(.nsAccessToken)) ?? ""
 

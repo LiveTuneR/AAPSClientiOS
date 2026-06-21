@@ -16,7 +16,7 @@ struct SettingsView: View {
     @State private var connectionResult: String?
     @State private var liveActivityOn = false
 
-    private let keychain = KeychainStore(service: "org.diy.aapsclient")
+    private let keychain = SharedConstants.credentialKeychain()
 
     init(store: AppStore, writer: NsTreatmentWriter) {
         self.store = store
@@ -118,14 +118,9 @@ struct SettingsView: View {
             testingConnection = false
             return
         }
+        // keychain is already the shared-group store, so the widget sees these.
         try? keychain.set(url.absoluteString, for: .nsUrl)
         try? keychain.set(accessToken.trimmingCharacters(in: .whitespacesAndNewlines), for: .nsAccessToken)
-
-        let sharedKeychain = KeychainStore(
-            service: SharedConstants.keychainService,
-            accessGroup: SharedConstants.keychainAccessGroup
-        )
-        try? keychain.migrate(to: sharedKeychain)
         WidgetCenter.shared.reloadAllTimelines()
 
         let token = accessToken.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -78,7 +78,7 @@ final class AppStore: ObservableObject {
     /// Makes refresh resilient to launch timing / Keychain re-population.
     func ensureConfigured() {
         guard !(client is NightscoutClientLive) else { return }
-        let kc = KeychainStore(service: "org.diy.aapsclient")
+        let kc = SharedConstants.credentialKeychain()
         let urlStr = (try? kc.get(.nsUrl)) ?? nil
         let token = (try? kc.get(.nsAccessToken)) ?? nil
         guard let urlStr, let url = Self.normalizedURL(urlStr),
