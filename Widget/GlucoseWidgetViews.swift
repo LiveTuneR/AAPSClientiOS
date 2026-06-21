@@ -13,14 +13,34 @@ struct GlucoseWidgetView: View {
     @Environment(\.widgetFamily) private var family
     let entry: GlucoseTimelineEntry
 
+    private var backgroundColor: Color {
+        (family == .systemSmall || family == .systemMedium) ? Color(.systemBackground) : .clear
+    }
+
     var body: some View {
-        switch family {
-        case .systemSmall: SmallView(entry: entry.entry)
-        case .systemMedium: MediumView(entry: entry.entry)
-        case .accessoryCircular: CircularView(entry: entry.entry)
-        case .accessoryRectangular: RectangularView(entry: entry.entry)
-        case .accessoryInline: InlineView(entry: entry.entry)
-        default: SmallView(entry: entry.entry)
+        Group {
+            switch family {
+            case .systemSmall: SmallView(entry: entry.entry)
+            case .systemMedium: MediumView(entry: entry.entry)
+            case .accessoryCircular: CircularView(entry: entry.entry)
+            case .accessoryRectangular: RectangularView(entry: entry.entry)
+            case .accessoryInline: InlineView(entry: entry.entry)
+            default: SmallView(entry: entry.entry)
+            }
+        }
+        .widgetContainerBackground(backgroundColor)
+    }
+}
+
+private extension View {
+    /// iOS 17 requires widgets to adopt `containerBackground`; on iOS 16 fall back
+    /// to a plain background so the same views build and render on both.
+    @ViewBuilder
+    func widgetContainerBackground(_ color: Color) -> some View {
+        if #available(iOS 17.0, *) {
+            containerBackground(color, for: .widget)
+        } else {
+            background(color)
         }
     }
 }

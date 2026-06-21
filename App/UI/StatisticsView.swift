@@ -105,63 +105,27 @@ struct StatisticsView: View {
         .frame(maxWidth: .infinity)
     }
 
+    private var agpYTicks: [(value: Double, label: String)] {
+        if units == .mmol {
+            return [5, 10, 15].map { (Double($0), "\($0)") }
+        } else {
+            return [50, 100, 150, 200, 250, 300].map { (Double($0), "\($0)") }
+        }
+    }
+
     private var agpChart: some View {
         VStack(spacing: 8) {
-        agpLegend
-        Chart {
-            // Outer band (P10–P90): darker steel blue, drawn first (full width).
-            ForEach(agpData) { hp in
-                AreaMark(
-                    x: .value("Hour", hp.hour),
-                    yStart: .value("P10", hp.p10),
-                    yEnd: .value("P90", hp.p90)
-                )
-                .foregroundStyle(agpOuter)
-                .interpolationMethod(.monotone)
-            }
-            // Inner band (P25–P75): lighter sky blue, drawn opaque on top of the outer band.
-            ForEach(agpData) { hp in
-                AreaMark(
-                    x: .value("Hour", hp.hour),
-                    yStart: .value("P25", hp.p25),
-                    yEnd: .value("P75", hp.p75)
-                )
-                .foregroundStyle(agpInner)
-                .interpolationMethod(.monotone)
-            }
-            // Median
-            ForEach(agpData) { hp in
-                LineMark(
-                    x: .value("Hour", hp.hour),
-                    y: .value("P50", hp.p50)
-                )
-                .foregroundStyle(Color.white)
-                .lineStyle(StrokeStyle(lineWidth: 2))
-                .interpolationMethod(.monotone)
-            }
-            // High threshold — yellow
-            RuleMark(y: .value("High", yVal(Double(store.thresholds.high))))
-                .foregroundStyle(Color.yellow.opacity(0.8))
-                .lineStyle(StrokeStyle(lineWidth: 1.5))
-            // Low threshold — red
-            RuleMark(y: .value("Low", yVal(Double(store.thresholds.low))))
-                .foregroundStyle(Color.red.opacity(0.8))
-                .lineStyle(StrokeStyle(lineWidth: 1.5))
-        }
-        .chartXScale(domain: 0...23)
-        .chartYScale(domain: yDomain)
-        .chartXAxis {
-            AxisMarks(values: [0, 3, 6, 9, 12, 15, 18, 21, 23]) { value in
-                AxisGridLine().foregroundStyle(Color.white.opacity(0.12))
-                AxisTick()
-                AxisValueLabel {
-                    if let h = value.as(Int.self) {
-                        Text("\(h)").font(.caption2)
-                    }
-                }
-            }
-        }
-        .frame(height: 240)
+            agpLegend
+            AGPChartView(
+                data: agpData,
+                yDomain: yDomain,
+                highLine: yVal(Double(store.thresholds.high)),
+                lowLine: yVal(Double(store.thresholds.low)),
+                yTicks: agpYTicks,
+                outer: agpOuter,
+                inner: agpInner
+            )
+            .frame(height: 240)
         }
     }
 
@@ -225,6 +189,104 @@ struct StatisticsView: View {
             Text(label).foregroundColor(.secondary)
             Spacer()
             Text(value).fontWeight(.medium)
+        }
+    }
+}
+
+/// AGP percentile chart rendered as explicit closed polygons (port of xdrip's
+/// `PercentileView.drawPolygon`). Each band is ONE closed `Path` — walk the upper
+/// edge left→right, then the lower edge right→left, then close — so the fill can
+/// never show internal gaps the way two overlapping SwiftUI `AreaMark` bands do.
+/// The band wraps cyclically (hour 23 → hour 0, "00:00 == 24:00") like xdrip.
+private struct AGPChartView: View {
+    let data: [HourlyPercentiles]          // 24 entries, values already in display units
+    let yDomain: ClosedRange<Double>
+    let highLine: Double                   // display units
+    let lowLine: Double                    // display units
+    let yTicks: [(value: Double, label: String)]
+    let outer: Color
+    let inner: Color
+
+    var body: some View {
+        Canvas { ctx, size in
+            guard data.count == 24 else { return }
+
+            let leftInset: CGFloat = 30
+            let bottomInset: CGFloat = 20
+            let topInset: CGFloat = 6
+            let plotLeft = leftInset
+            let plotRight = size.width
+            let plotTop = topInset
+            let plotBottom = size.height - bottomInset
+            let plotW = plotRight - plotLeft
+            let plotH = plotBottom - plotTop
+            let yLo = yDomain.lowerBound
+            let yHi = yDomain.upperBound
+
+            func x(_ hour: Double) -> CGFloat { plotLeft + plotW * CGFloat(hour / 24.0) }
+            func y(_ v: Double) -> CGFloat {
+                let t = (v - yLo) / (yHi - yLo)
+                return plotBottom - plotH * CGFloat(t)
+            }
+
+            // Vertical gridlines every 3h (dashed).
+            for h in stride(from: 0, through: 24, by: 3) {
+                var g = Path()
+                g.move(to: CGPoint(x: x(Double(h)), y: plotTop))
+                g.addLine(to: CGPoint(x: x(Double(h)), y: plotBottom))
+                ctx.stroke(g, with: .color(.white.opacity(0.10)),
+                           style: StrokeStyle(lineWidth: 1, dash: [2, 4]))
+            }
+            // Horizontal gridlines + y labels.
+            for tick in yTicks where tick.value >= yLo && tick.value <= yHi {
+                var g = Path()
+                g.move(to: CGPoint(x: plotLeft, y: y(tick.value)))
+                g.addLine(to: CGPoint(x: plotRight, y: y(tick.value)))
+                ctx.stroke(g, with: .color(.white.opacity(0.08)), lineWidth: 1)
+                ctx.draw(Text(tick.label).font(.caption2).foregroundColor(.secondary),
+                         at: CGPoint(x: leftInset / 2, y: y(tick.value)))
+            }
+
+            // One closed polygon per band (upper edge L→R, wrap, lower edge R→L).
+            func band(_ lower: (HourlyPercentiles) -> Double,
+                      _ upper: (HourlyPercentiles) -> Double) -> Path {
+                var p = Path()
+                p.move(to: CGPoint(x: x(0), y: y(upper(data[0]))))
+                for h in 1..<24 { p.addLine(to: CGPoint(x: x(Double(h)), y: y(upper(data[h])))) }
+                p.addLine(to: CGPoint(x: x(24), y: y(upper(data[0]))))   // wrap top edge
+                p.addLine(to: CGPoint(x: x(24), y: y(lower(data[0]))))   // drop to lower edge
+                for h in stride(from: 23, through: 0, by: -1) {
+                    p.addLine(to: CGPoint(x: x(Double(h)), y: y(lower(data[h]))))
+                }
+                p.closeSubpath()
+                return p
+            }
+            ctx.fill(band({ $0.p10 }, { $0.p90 }), with: .color(outer))
+            ctx.fill(band({ $0.p25 }, { $0.p75 }), with: .color(inner))
+
+            // Median line (with cyclic wrap).
+            var med = Path()
+            med.move(to: CGPoint(x: x(0), y: y(data[0].p50)))
+            for h in 1..<24 { med.addLine(to: CGPoint(x: x(Double(h)), y: y(data[h].p50))) }
+            med.addLine(to: CGPoint(x: x(24), y: y(data[0].p50)))
+            ctx.stroke(med, with: .color(.white), lineWidth: 2)
+
+            // Threshold lines.
+            var hi = Path()
+            hi.move(to: CGPoint(x: plotLeft, y: y(highLine)))
+            hi.addLine(to: CGPoint(x: plotRight, y: y(highLine)))
+            ctx.stroke(hi, with: .color(.yellow.opacity(0.85)), lineWidth: 1.5)
+            var lo = Path()
+            lo.move(to: CGPoint(x: plotLeft, y: y(lowLine)))
+            lo.addLine(to: CGPoint(x: plotRight, y: y(lowLine)))
+            ctx.stroke(lo, with: .color(.red.opacity(0.85)), lineWidth: 1.5)
+
+            // X-axis hour labels every 3h.
+            for h in stride(from: 0, through: 24, by: 3) {
+                let label = h == 24 ? "0" : "\(h)"
+                ctx.draw(Text(label).font(.caption2).foregroundColor(.secondary),
+                         at: CGPoint(x: x(Double(h)), y: plotBottom + 10))
+            }
         }
     }
 }

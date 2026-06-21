@@ -5,6 +5,8 @@ struct ProfileView: View {
     @ObservedObject var store: AppStore
     let writer: NsTreatmentWriter
     @State private var selectedName: String?
+    @State private var switchTarget: ProfileSelection?
+    @State private var editTarget: ProfileSelection?
     @State private var switchPct = "100"
     @State private var switchDur = "0"
 
@@ -16,9 +18,7 @@ struct ProfileView: View {
                 Section("Profiles") {
                     ForEach(ps.profileNames, id: \.self) { name in
                         profileCard(name, isActive: isActive(name))
-                            .onTapGesture {
-                                selectedName = name
-                            }
+                            .onTapGesture { selectedName = name }
                     }
                 }
                 if let active = store.activeProfileSwitch?.profileName,
@@ -35,11 +35,27 @@ struct ProfileView: View {
             }
         }
         .navigationTitle("Profile")
-        .sheet(item: Binding(
-            get: { selectedName.map { ProfileSelection(name: $0) } },
-            set: { selectedName = $0?.name }
-        )) { sel in
+        .confirmationDialog("Profile", isPresented: Binding(
+            get: { selectedName != nil },
+            set: { if !$0 { selectedName = nil } }
+        )) {
+            if let name = selectedName {
+                Button("Switch") { switchTarget = ProfileSelection(name: name) }
+                Button("Edit Values") { editTarget = ProfileSelection(name: name) }
+                Button("Cancel", role: .cancel) {}
+            }
+        } message: {
+            if let name = selectedName {
+                Text(name)
+            }
+        }
+        .sheet(item: $switchTarget) { sel in
             profileSwitchSheet(for: sel.name)
+        }
+        .sheet(item: $editTarget) { sel in
+            if let json = store.profileStore?.rawJson[sel.name] {
+                ProfileEditView(store: store, writer: writer, profileName: sel.name, rawJson: json)
+            }
         }
     }
 
@@ -55,15 +71,20 @@ struct ProfileView: View {
             }
             .navigationTitle("Switch to \(name)")
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { selectedName = nil } }
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { switchTarget = nil } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Switch") {
                         switchTo(name)
-                        selectedName = nil
+                        switchTarget = nil
                     }
                 }
             }
         }
+    }
+
+    private struct ProfileSelection: Identifiable {
+        let name: String
+        var id: String { name }
     }
 
     private func switchTo(_ name: String) {
@@ -79,11 +100,26 @@ struct ProfileView: View {
     }
 
     private func profileCard(_ name: String, isActive: Bool) -> some View {
-        HStack {
+        let basalSum: Double? = {
+            guard let json = store.profileStore?.rawJson[name],
+                  let data = json.data(using: .utf8),
+                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+            let prof = NsMapping.parseProfileObject(obj)
+            return dailyBasalUnits(prof.basal.map { ($0.startSeconds, $0.rate) })
+        }()
+
+        return HStack {
             VStack(alignment: .leading) {
                 Text(name).font(.headline)
-                if let pct = store.activeProfileSwitch?.percentage, isActive, pct != 100 {
-                    Text("\(pct)%").font(.caption).foregroundColor(.secondary)
+                HStack {
+                    if let sum = basalSum {
+                        Text("Σ \(String(format: "%.2f", sum)) ед")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    if let pct = store.activeProfileSwitch?.percentage, isActive, pct != 100 {
+                        Text("\(pct)%").font(.caption).foregroundColor(.secondary)
+                    }
                 }
             }
             Spacer()
@@ -95,72 +131,77 @@ struct ProfileView: View {
         .padding(.vertical, 4)
     }
 
-    private struct ProfileSelection: Identifiable {
-        let name: String
-        var id: String { name }
-    }
+    // MARK: - Charts
 
-    // Charts (from R9.3)
     private func basalChart(_ p: NsProfile) -> some View {
-        Chart {
-            ForEach(p.basal.indices, id: \.self) { i in
-                let b = p.basal[i]; let next = i + 1 < p.basal.count ? p.basal[i + 1].startSeconds : 86400
-                RectangleMark(xStart: .value("S", secondsToHour(b.startSeconds)), xEnd: .value("E", secondsToHour(next)),
-                              yStart: .value("R", 0), yEnd: .value("R", b.rate))
-                .foregroundStyle(.blue.opacity(0.3))
-            }
-        }
-        .chartYAxisLabel("U/h").chartXScale(domain: 0...24).frame(height: 100)
+        StepChart(
+            points: stepChartPoints(p.basal.map { ($0.startSeconds, $0.rate) }),
+            unitLabel: "U/h",
+            color: .blue
+        )
     }
 
     private func targetChart(_ p: NsProfile) -> some View {
-        Chart {
-            ForEach(p.basal.indices, id: \.self) { i in
-                let s = secondsToHour(p.basal[i].startSeconds)
-                let e = i + 1 < p.basal.count ? secondsToHour(p.basal[i + 1].startSeconds) : 24
-                let lo = profileValue(blocks: p.targetLow, atSeconds: p.basal[i].startSeconds).map { yVal(Double($0)) } ?? 0
-                let hi = profileValue(blocks: p.targetHigh, atSeconds: p.basal[i].startSeconds).map { yVal(Double($0)) } ?? 0
-                RectangleMark(xStart: .value("S", s), xEnd: .value("E", e), yStart: .value("L", lo), yEnd: .value("H", hi))
-                    .foregroundStyle(.green.opacity(0.3))
-            }
-        }
-        .chartXScale(domain: 0...24).frame(height: 100)
+        let lo = p.targetLow.map { ($0.startSeconds, gVal($0.value, p)) }
+        let hi = p.targetHigh.map { ($0.startSeconds, gVal($0.value, p)) }
+        return TargetBandChart(loBlocks: lo, hiBlocks: hi, unitLabel: units.rawValue)
     }
 
     private func isfChart(_ p: NsProfile) -> some View {
-        Chart {
-            ForEach(p.sensitivity.indices, id: \.self) { i in
-                let s = p.sensitivity[i]; let next = i + 1 < p.sensitivity.count ? p.sensitivity[i + 1].startSeconds : 86400
-                RectangleMark(xStart: .value("S", secondsToHour(s.startSeconds)), xEnd: .value("E", secondsToHour(next)),
-                              yStart: .value("R", 0), yEnd: .value("R", yVal(Double(s.value))))
-                .foregroundStyle(.orange.opacity(0.3))
-            }
-        }
-        .chartXScale(domain: 0...24).frame(height: 80)
+        StepChart(
+            points: stepChartPoints(p.sensitivity.map { ($0.startSeconds, gVal($0.value, p)) }),
+            unitLabel: units.rawValue,
+            color: .orange
+        )
     }
 
     private func icrChart(_ p: NsProfile) -> some View {
+        StepChart(
+            points: stepChartPoints(p.carbRatio.map { ($0.startSeconds, $0.value) }),
+            unitLabel: "g/U",
+            color: .purple
+        )
+    }
+
+    private func gVal(_ value: Double, _ p: NsProfile) -> Double {
+        convertUnit(value: value, from: p.units, to: units)
+    }
+}
+
+// MARK: - Target band chart (two lines + fill between)
+
+private struct TargetBandChart: View {
+    let loBlocks: [(startSeconds: Int, value: Double)]
+    let hiBlocks: [(startSeconds: Int, value: Double)]
+    let unitLabel: String
+
+    var body: some View {
+        let lo = stepChartPoints(loBlocks)
+        let hi = stepChartPoints(hiBlocks)
+        let allX = Array(Set(lo.map(\.hour) + hi.map(\.hour))).sorted()
         Chart {
-            ForEach(p.carbRatio.indices, id: \.self) { i in
-                let c = p.carbRatio[i]; let next = i + 1 < p.carbRatio.count ? p.carbRatio[i + 1].startSeconds : 86400
-                RectangleMark(xStart: .value("S", secondsToHour(c.startSeconds)), xEnd: .value("E", secondsToHour(next)),
-                              yStart: .value("R", 0), yEnd: .value("R", yVal(Double(c.value))))
-                .foregroundStyle(.purple.opacity(0.3))
+            ForEach(Array(zip(allX, allX.dropFirst())), id: \.0) { (x, nextX) in
+                RectangleMark(
+                    xStart: .value("S", x),
+                    xEnd: .value("E", nextX),
+                    yStart: .value("L", stepValue(at: x, in: lo)),
+                    yEnd: .value("H", stepValue(at: x, in: hi))
+                )
+                .foregroundStyle(.green.opacity(0.2))
             }
+            ForEach(lo, id: \.hour) { LineMark(x: .value("h", $0.hour), y: .value("v", $0.value)) }
+                .foregroundStyle(.green)
+            ForEach(hi, id: \.hour) { LineMark(x: .value("h", $0.hour), y: .value("v", $0.value)) }
+                .foregroundStyle(.green)
         }
-        .chartXScale(domain: 0...24).frame(height: 80)
+        .chartXScale(domain: 0.0...24.0)
+        .chartXAxis { AxisMarks(values: .automatic(desiredCount: 7)) }
+        .chartYAxisLabel(unitLabel)
+        .frame(height: 100)
     }
 
-    private func secondsToHour(_ secs: Int) -> Double { Double(secs) / 3600 }
-    private func yVal(_ mgdl: Double) -> Double { units == .mmol ? mgdl / 18.0182 : mgdl }
+    private func stepValue(at hour: Double, in points: [(hour: Double, value: Double)]) -> Double {
+        points.last(where: { $0.hour <= hour })?.value ?? points.first?.value ?? 0
+    }
 }
 
-func profileValue(blocks: [ScheduledValue], atSeconds secs: Int) -> Int? {
-    var best: ScheduledValue?
-    for b in blocks {
-        if b.startSeconds <= secs {
-            if best == nil || b.startSeconds > best!.startSeconds { best = b }
-        }
-    }
-    return best.map { Int($0.value) }
-}
