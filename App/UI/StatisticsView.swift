@@ -7,6 +7,7 @@ struct StatisticsView: View {
     @State private var period = 1
     @State private var loaded: [GlucoseReading] = []
     @State private var loading = false
+    @State private var cache = PeriodCache<Int, [GlucoseReading]>(ttl: 60)
 
     private var units: GlucoseUnits { store.displayUnits }
 
@@ -67,11 +68,16 @@ struct StatisticsView: View {
     }
 
     private func load() async {
+        if let cached = cache.value(for: period) {
+            loaded = cached
+            return
+        }
         loading = true
         defer { loading = false }
         store.ensureConfigured()
         if let data = try? await store.client.fetchEntries(sinceDays: period) {
             loaded = data
+            cache.store(data, for: period)
         }
     }
 
