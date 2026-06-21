@@ -30,6 +30,12 @@
       "carbs": 15,
       "enteredBy": "AAPSClient-iOS",
       "srvModified": 1525382000200
+    },
+    {
+      "eventType": "Site Change",
+      "created_at": "2026-06-20T10:15:00Z",
+      "enteredBy": "AndroidAPS",
+      "_id": "site-change-created-at-only"
     }
   ]
 }

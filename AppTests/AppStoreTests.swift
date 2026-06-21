@@ -12,7 +12,7 @@ final class AppStoreTests: XCTestCase {
 
         XCTAssertEqual(store.readings.count, 2)
         XCTAssertEqual(store.loopStatus?.iob, 1.85)
-        XCTAssertEqual(store.treatments.count, 3)
+        XCTAssertEqual(store.treatments.count, 4)
     }
 
     func test_connectionLostAlarmOnNetworkError() async throws {

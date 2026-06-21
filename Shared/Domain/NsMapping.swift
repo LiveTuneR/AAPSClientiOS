@@ -28,10 +28,11 @@ enum NsMapping {
     static func treatments(from data: Data) throws -> [Treatment] {
         try resultArray(data).map { d in
             let ts = num(d["date"]) ?? num(d["mills"]) ?? num(d["timestamp"])
+            let createdAt = (d["created_at"] as? String).flatMap(isoParse)
             return Treatment(
                 id: (d["identifier"] as? String) ?? (d["_id"] as? String) ?? UUID().uuidString,
                 eventType: (d["eventType"] as? String) ?? "",
-                date: date(from: ts),
+                date: ts.map { Date(timeIntervalSince1970: $0 / 1000) } ?? createdAt ?? Date(),
                 insulin: num(d["insulin"]),
                 carbs: num(d["carbs"]),
                 durationMin: intVal(d["duration"]),

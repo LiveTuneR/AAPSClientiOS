@@ -29,7 +29,7 @@ final class NightscoutReadTests: XCTestCase {
         transport.responseData = fixture
         let treatments = try await client.fetchTreatments()
 
-        XCTAssertEqual(treatments.count, 3)
+        XCTAssertEqual(treatments.count, 4)
         XCTAssertEqual(treatments[0].eventType, "Meal Bolus")
     }
 

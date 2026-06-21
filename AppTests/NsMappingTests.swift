@@ -16,7 +16,7 @@ final class NsMappingTests: XCTestCase {
     func test_mapsTreatments() throws {
         let data = try loadFixture("treatments")
         let treatments = try NsMapping.treatments(from: data)
-        XCTAssertEqual(treatments.count, 3)
+        XCTAssertEqual(treatments.count, 4)
 
         let bolus = treatments[0]
         XCTAssertEqual(bolus.eventType, "Meal Bolus")
@@ -32,6 +32,18 @@ final class NsMappingTests: XCTestCase {
         XCTAssertEqual(carbs.eventType, "Carb Correction")
         XCTAssertEqual(carbs.carbs, 15)
         XCTAssertEqual(carbs.enteredBy, "AAPSClient-iOS")
+    }
+
+    func test_mapsTreatmentDateFromCreatedAtWhenNumericFieldsMissing() throws {
+        let data = try loadFixture("treatments")
+        let treatments = try NsMapping.treatments(from: data)
+        XCTAssertEqual(treatments.count, 4)
+
+        let siteChange = treatments[3]
+        XCTAssertEqual(siteChange.eventType, "Site Change")
+
+        let expected = ISO8601DateFormatter().date(from: "2026-06-20T10:15:00Z")!
+        XCTAssertEqual(siteChange.date.timeIntervalSince1970, expected.timeIntervalSince1970, accuracy: 1.0)
     }
 
     func test_mapsDeviceStatusToLoopStatus() throws {
