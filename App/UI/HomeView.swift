@@ -26,6 +26,7 @@ struct HomeView: View {
     @State private var showCarbsConfirm = false
     @State private var showIOB = false
     @State private var showCOB = false
+    @State private var showBasal = false
 
     private var loopState: LoopState {
         LoopStateCalc.from(statusTimestamp: store.loopStatus?.timestamp, now: Date())
@@ -86,34 +87,22 @@ struct HomeView: View {
     }
 
 
-    private struct BasalSegment: Equatable {
-        let start: Date
-        let end: Date
-        let rate: Double
+    private var tempBasalTreatmentsInWindow: [Treatment] {
+        store.treatments.filter { $0.eventType == "Temp Basal" && $0.date > cutoff.addingTimeInterval(-3600) }
     }
 
-    private var basalSegments: [BasalSegment] {
-        guard let basal = store.profile?.basal, !basal.isEmpty else { return [] }
-        let cal = Calendar.current
-        return basal.indices.flatMap { i in
-            let b = basal[i]
-            let rate = b.rate
-            let startSeconds = b.startSeconds
-            let endSeconds = i + 1 < basal.count ? basal[i + 1].startSeconds : 86400
-            let fullDays = Int(cutoff.timeIntervalSince1970) / 86400...Int(Date().timeIntervalSince1970) / 86400
-            return fullDays.flatMap { day -> BasalSegment? in
-                guard let startOfDay = cal.date(bySettingHour: 0, minute: 0, second: 0, of: Date(timeIntervalSince1970: Double(day * 86400))) else { return nil }
-                let s = startOfDay.addingTimeInterval(Double(startSeconds))
-                let e = startOfDay.addingTimeInterval(Double(endSeconds))
-                guard s < Date(), e > cutoff else { return nil }
-                return BasalSegment(start: max(s, cutoff), end: min(e, Date()), rate: rate)
-            }
-        }
+    private var basalSegmentsInWindow: [AAPSClientiOS.BasalSegment] {
+        guard let basal = store.profile?.basal else { return [] }
+        return AAPSClientiOS.basalSegments(basal: basal, windowStart: cutoff, windowEnd: chartXEnd)
     }
 
-    // Maps U/h → mg/dl equivalent Y, capped at 3 U/h filling the 30–57 strip.
-    private func basalY(_ rate: Double) -> Double {
-        yVal(30 + min(rate, 3.0) / 3.0 * 27)
+    private var actualBasalSegmentsInWindow: [ActualBasalSegment] {
+        actualBasalSegments(
+            scheduled: basalSegmentsInWindow,
+            tempBasal: tempBasalTreatmentsInWindow,
+            windowStart: cutoff,
+            windowEnd: chartXEnd
+        )
     }
 
     var body: some View {
@@ -356,7 +345,7 @@ struct HomeView: View {
     // MARK: - Chart
 
     private func yVal(_ mgdl: Double) -> Double { units == .mmol ? mgdl / 18.0182 : mgdl }
-    // Lower bound at 30 to give basal strip and bolus spikes room below urgentLow (55).
+    // Lower bound at 30 to give bolus spikes room below urgentLow (55).
     private var yDomain: ClosedRange<Double> { units == .mmol ? (30/18.0182)...(300/18.0182) : 30...300 }
     private var chartXEnd: Date { predictionLines.flatMap { $0.points }.map { $0.0 }.max() ?? Date() }
 
@@ -424,6 +413,7 @@ struct HomeView: View {
                 Spacer()
                 subChartToggle("IOB", active: showIOB, color: .blue) { showIOB.toggle() }
                 subChartToggle("COB", active: showCOB, color: .orange) { showCOB.toggle() }
+                subChartToggle("Basal", active: showBasal, color: .teal) { showBasal.toggle() }
             }
             Chart { chartContent }
                 .chartYScale(domain: yDomain)
@@ -455,6 +445,7 @@ struct HomeView: View {
                 .frame(height: 250)
             if showIOB && !statusInWindow.isEmpty { iobChart }
             if showCOB && !statusInWindow.isEmpty { cobChart }
+            if showBasal && !basalSegmentsInWindow.isEmpty { basalChart }
         }
     }
 
@@ -509,24 +500,6 @@ struct HomeView: View {
             .foregroundStyle(.green.opacity(0.4)).lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 4]))
         RuleMark(y: .value("H", yVal(Double(store.thresholds.high))))
             .foregroundStyle(.green.opacity(0.4)).lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 4]))
-
-        // Scheduled basal strip at bottom of chart
-        ForEach(basalSegments, id: \.start) { seg in
-            RectangleMark(
-                xStart: .value("S", seg.start), xEnd: .value("E", seg.end),
-                yStart: .value("B", yVal(30)), yEnd: .value("B", basalY(seg.rate))
-            )
-            .foregroundStyle(Color.blue.opacity(0.3))
-        }
-        // Temp basal overlay: highlight right edge when current rate differs from scheduled
-        if let tempRate = store.loopStatus?.tempBasalRate,
-           let lastSeg = basalSegments.last, abs(tempRate - lastSeg.rate) > 0.001 {
-            RectangleMark(
-                xStart: .value("S", lastSeg.start), xEnd: .value("E", lastSeg.end),
-                yStart: .value("B", yVal(30)), yEnd: .value("B", basalY(tempRate))
-            )
-            .foregroundStyle(Color.blue.opacity(0.6))
-        }
     }
 
     private var iobChart: some View {
@@ -591,6 +564,62 @@ struct HomeView: View {
         .frame(height: 90)
         .overlay(alignment: .topLeading) {
             Text("COB").font(.caption2).bold().foregroundColor(.orange)
+                .padding(.leading, 6).padding(.top, 4)
+        }
+    }
+
+    private var basalChart: some View {
+        let scheduled = basalSegmentsInWindow
+        let actual = actualBasalSegmentsInWindow
+        let yMax = max((scheduled.map(\.rate) + actual.map(\.rate)).max() ?? 0.5, 0.5) * 1.2
+        let tempStarts = tempBasalTreatmentsInWindow.filter { $0.date > cutoff && ($0.durationMin ?? 0) > 0 }
+        return Chart {
+            ForEach(scheduled) { seg in
+                RectangleMark(
+                    xStart: .value("T", seg.start), xEnd: .value("T", seg.end),
+                    yStart: .value("B", 0.0), yEnd: .value("R", seg.rate)
+                )
+            }
+            .foregroundStyle(Color.teal.opacity(0.18))
+            ForEach(scheduled) { seg in
+                LineMark(x: .value("T", seg.start), y: .value("R", seg.rate), series: .value("s", "scheduled"))
+                LineMark(x: .value("T", seg.end), y: .value("R", seg.rate), series: .value("s", "scheduled"))
+            }
+            .foregroundStyle(Color.teal.opacity(0.7))
+            .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+
+            ForEach(actual) { seg in
+                RectangleMark(
+                    xStart: .value("T", seg.start), xEnd: .value("T", seg.end),
+                    yStart: .value("B", 0.0), yEnd: .value("R", seg.rate)
+                )
+            }
+            .foregroundStyle(Color.teal.opacity(0.55))
+
+            ForEach(tempStarts, id: \.id) { t in
+                PointMark(x: .value("T", t.date), y: .value("R", 0.0))
+                    .symbol {
+                        Image(systemName: "arrowtriangle.up.fill").font(.system(size: 7))
+                            .foregroundStyle((t.absolute ?? 1) <= 0.001 || t.tempBasalPercent == 0 ? Color.red.opacity(0.8) : Color.teal)
+                    }
+            }
+
+            RuleMark(y: .value("Zero", 0.0))
+                .foregroundStyle(Color.secondary.opacity(0.35))
+                .lineStyle(StrokeStyle(lineWidth: 0.5))
+        }
+        .chartXScale(domain: cutoff...chartXEnd)
+        .chartYScale(domain: 0...yMax)
+        .chartXAxis(.hidden)
+        .chartYAxis {
+            AxisMarks(values: .automatic(desiredCount: 3)) { _ in
+                AxisGridLine().foregroundStyle(Color.white.opacity(0.1))
+                AxisValueLabel { EmptyView() }
+            }
+        }
+        .frame(height: 90)
+        .overlay(alignment: .topLeading) {
+            Text("BASAL").font(.caption2).bold().foregroundColor(.teal)
                 .padding(.leading, 6).padding(.top, 4)
         }
     }
