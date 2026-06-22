@@ -1,0 +1,31 @@
+{
+  "status": 200,
+  "result": [
+    {
+      "identifier": "tb-zero-temp",
+      "eventType": "Temp Basal",
+      "date": 1525383610088,
+      "duration": 30,
+      "absolute": 0.0,
+      "enteredBy": "AndroidAPS",
+      "srvModified": 1525383610200
+    },
+    {
+      "identifier": "tb-percent",
+      "eventType": "Temp Basal",
+      "date": 1525383700088,
+      "duration": 45,
+      "percent": 150,
+      "enteredBy": "AndroidAPS",
+      "srvModified": 1525383700200
+    },
+    {
+      "identifier": "tb-cancel",
+      "eventType": "Temp Basal",
+      "date": 1525383900088,
+      "duration": 0,
+      "enteredBy": "AndroidAPS",
+      "srvModified": 1525383900200
+    }
+  ]
+}

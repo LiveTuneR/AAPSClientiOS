@@ -68,6 +68,8 @@ struct Treatment: Equatable, Identifiable {
     let targetTop: Int?
     let profileName: String?
     let percentage: Int?
+    let absolute: Double?
+    let tempBasalPercent: Int?
 }
 
 struct NsProfile: Equatable {

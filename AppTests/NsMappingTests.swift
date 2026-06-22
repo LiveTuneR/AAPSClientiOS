@@ -142,4 +142,24 @@ final class NsMappingTests: XCTestCase {
         XCTAssertEqual(entries[4].iob, -0.30, accuracy: 0.001)
         XCTAssertTrue(entries[0].date > entries[4].date)
     }
+
+    func test_mapsTempBasalAbsoluteAndPercent() throws {
+        let data = try loadFixture("treatments_tempbasal")
+        let treatments = try NsMapping.treatments(from: data)
+        XCTAssertEqual(treatments.count, 3)
+
+        let zero = treatments[0]
+        XCTAssertEqual(zero.eventType, "Temp Basal")
+        XCTAssertEqual(zero.durationMin, 30)
+        XCTAssertEqual(zero.absolute, 0.0)
+        XCTAssertNil(zero.tempBasalPercent)
+
+        let pct = treatments[1]
+        XCTAssertEqual(pct.durationMin, 45)
+        XCTAssertNil(pct.absolute)
+        XCTAssertEqual(pct.tempBasalPercent, 150)
+
+        let cancel = treatments[2]
+        XCTAssertEqual(cancel.durationMin, 0)
+    }
 }

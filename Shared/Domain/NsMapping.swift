@@ -41,7 +41,9 @@ enum NsMapping {
                 targetBottom: parseTTTarget(from: d).bottom,
                 targetTop: parseTTTarget(from: d).top,
                 profileName: d["profile"] as? String,
-                percentage: intVal(d["percentage"])
+                percentage: intVal(d["percentage"]),
+                absolute: num(d["absolute"]),
+                tempBasalPercent: intVal(d["percent"])
             )
         }
     }
