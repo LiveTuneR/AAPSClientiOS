@@ -14,7 +14,10 @@ struct SettingsView: View {
     @State private var staleMinutes: String
     @State private var testingConnection = false
     @State private var connectionResult: String?
-    @State private var liveActivityOn = false
+    @State private var liveActivityOn = {
+        if #available(iOS 16.1, *) { return LiveActivityController.shared.isRunning }
+        return false
+    }()
 
     private let keychain = SharedConstants.credentialKeychain()
 

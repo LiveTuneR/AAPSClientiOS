@@ -9,6 +9,13 @@ final class LiveActivityController {
     static let shared = LiveActivityController()
     private var activity: Activity<GlucoseActivityAttributes>?
 
+    private init() {
+        // Re-attach to an activity that survived a previous app launch.
+        // Without this, the in-memory reference is nil after relaunch and every
+        // update() is silently dropped, leaving the Live Activity frozen on screen.
+        activity = Activity<GlucoseActivityAttributes>.activities.first
+    }
+
     var isSupported: Bool { ActivityAuthorizationInfo().areActivitiesEnabled }
 
     func start(with state: GlucoseActivityAttributes.ContentState) {
