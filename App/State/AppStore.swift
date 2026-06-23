@@ -167,12 +167,16 @@ final class AppStore: ObservableObject {
 
         evaluateAlarms()
 
+        // Glucose is the priority surface: push fresh readings to the widget and
+        // Live Activity whenever entries succeeded, even if another stage
+        // (devicestatus/treatments) failed. Otherwise a partial failure throws
+        // below and freezes the widget/LA while the in-app screen shows new data.
+        if entriesOk { updateSharedSnapshot() }
+
         if let firstError {
             alarmEngine.schedule(.connectionLost)
             throw firstError
         }
-
-        updateSharedSnapshot()
     }
 
     /// Mirror the latest reading + display config into the App Group for the widget.
