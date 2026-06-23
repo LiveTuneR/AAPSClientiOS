@@ -11,6 +11,14 @@ import Foundation
 /// This is the same technique used by Loop Follow, xDrip4iOS (when no BLE),
 /// and other CGM follower apps.
 final class AudioKeepAlive {
+    /// Foreground cadence: keep glucose, widget and Live Activity fresh while the
+    /// user is looking at the app. The tick is cheap because it calls
+    /// `refreshIfStale()`, which no-ops unless data is older than 60 s.
+    static let foregroundInterval: TimeInterval = 60
+    /// Background cadence: matches the CGM upload interval; the audio session keeps
+    /// the app alive so this timer keeps firing while backgrounded.
+    static let backgroundInterval: TimeInterval = 5 * 60
+
     private let engine = AVAudioEngine()
     private var timer: Timer?
     private var started = false
@@ -24,10 +32,18 @@ final class AudioKeepAlive {
         self.isAudioKeepAliveEnabled = !isRunningOnMac
     }
 
-    /// Call when the app becomes active. Safe to call repeatedly.
-    func start(onTick: @escaping () -> Void) {
+    /// App became active: fast foreground polling so the open app, widget and Live
+    /// Activity update close to real time. Safe to call repeatedly.
+    func enterForeground(onTick: @escaping () -> Void) {
         startEngine()
-        scheduleTimer(onTick: onTick)
+        scheduleTimer(interval: Self.foregroundInterval, onTick: onTick)
+    }
+
+    /// App went to background: drop to the 5-minute cadence; the audio session
+    /// (already running from foreground) keeps the timer alive.
+    func enterBackground(onTick: @escaping () -> Void) {
+        startEngine()
+        scheduleTimer(interval: Self.backgroundInterval, onTick: onTick)
     }
 
     private func startEngine() {
@@ -43,9 +59,9 @@ final class AudioKeepAlive {
         }
     }
 
-    private func scheduleTimer(onTick: @escaping () -> Void) {
+    private func scheduleTimer(interval: TimeInterval, onTick: @escaping () -> Void) {
         timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: 5 * 60, repeats: true) { _ in onTick() }
+        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { _ in onTick() }
         RunLoop.main.add(timer!, forMode: .common)
     }
 }

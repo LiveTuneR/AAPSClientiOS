@@ -13,4 +13,15 @@ final class AudioKeepAliveTests: XCTestCase {
         let keepAlive = AudioKeepAlive(isRunningOnMac: false)
         XCTAssertTrue(keepAlive.isAudioKeepAliveEnabled)
     }
+
+    // Foreground polls fast for a live UI/Live Activity; background drops to the
+    // CGM upload cadence to save battery and network.
+    func test_foreground_polls_faster_than_background() {
+        XCTAssertLessThan(AudioKeepAlive.foregroundInterval, AudioKeepAlive.backgroundInterval)
+    }
+
+    func test_intervals_haveExpectedCadence() {
+        XCTAssertEqual(AudioKeepAlive.foregroundInterval, 60)
+        XCTAssertEqual(AudioKeepAlive.backgroundInterval, 5 * 60)
+    }
 }

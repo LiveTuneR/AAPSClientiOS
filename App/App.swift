@@ -68,8 +68,15 @@ struct AAPSClientApp: App {
                 // Initial data refresh is owned by HomeView (.task) so errors surface there.
             }
             .onChange(of: scenePhase) { phase in
-                if phase == .active {
-                    keepAlive.start { Task { try? await store.refresh() } }
+                switch phase {
+                case .active:
+                    // Fast foreground polling; refreshIfStale() no-ops within 60 s
+                    // so this stays cheap while keeping the open app + Live Activity live.
+                    keepAlive.enterForeground { Task { await store.refreshIfStale() } }
+                case .background:
+                    keepAlive.enterBackground { Task { try? await store.refresh() } }
+                default:
+                    break
                 }
             }
         }
