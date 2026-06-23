@@ -26,7 +26,6 @@ struct HomeView: View {
     @State private var showCarbsConfirm = false
     @State private var showIOB = false
     @State private var showCOB = false
-    @State private var showBasal = false
 
     private var loopState: LoopState {
         LoopStateCalc.from(statusTimestamp: store.loopStatus?.timestamp, now: Date())
@@ -349,6 +348,15 @@ struct HomeView: View {
     private var yDomain: ClosedRange<Double> { units == .mmol ? (30/18.0182)...(300/18.0182) : 30...300 }
     private var chartXEnd: Date { predictionLines.flatMap { $0.points }.map { $0.0 }.max() ?? Date() }
 
+    // Basal "icicles" hang from the top of the glucose chart; length is proportional to rate.
+    private var basalIcicleBandHeight: Double { (yDomain.upperBound - yDomain.lowerBound) * 0.16 }
+    private var basalMaxRateInWindow: Double {
+        max((basalSegmentsInWindow.map(\.rate) + actualBasalSegmentsInWindow.map(\.rate)).max() ?? 0.5, 0.5)
+    }
+    private func basalIcicleY(_ rate: Double) -> Double {
+        yDomain.upperBound - basalIcicleBandHeight * min(rate / basalMaxRateInWindow, 1.0)
+    }
+
     private var statusInWindow: [DeviceStatusEntry] {
         store.deviceStatusHistory
             .filter { $0.date >= cutoff }
@@ -413,7 +421,6 @@ struct HomeView: View {
                 Spacer()
                 subChartToggle("IOB", active: showIOB, color: .blue) { showIOB.toggle() }
                 subChartToggle("COB", active: showCOB, color: .orange) { showCOB.toggle() }
-                subChartToggle("Basal", active: showBasal, color: .teal) { showBasal.toggle() }
             }
             Chart { chartContent }
                 .chartYScale(domain: yDomain)
@@ -445,11 +452,27 @@ struct HomeView: View {
                 .frame(height: 250)
             if showIOB && !statusInWindow.isEmpty { iobChart }
             if showCOB && !statusInWindow.isEmpty { cobChart }
-            if showBasal && !basalSegmentsInWindow.isEmpty { basalChart }
         }
     }
 
+    // iAPS Insulin/Basal asset color (Assets.xcassets/Colors/Insulin.colorset).
+    private static let basalColor = Color(red: 0.118, green: 0.588, blue: 0.988)
+
     @ChartContentBuilder private var chartContent: some ChartContent {
+        // Basal "icicles" hanging from the chart's top edge — drawn first so the glucose line sits on top.
+        ForEach(actualBasalSegmentsInWindow) { seg in
+            RectangleMark(
+                xStart: .value("T", seg.start), xEnd: .value("T", seg.end),
+                yStart: .value("B", yDomain.upperBound), yEnd: .value("B", basalIcicleY(seg.rate))
+            )
+        }
+        .foregroundStyle(Self.basalColor.opacity(0.4))
+        ForEach(basalSegmentsInWindow) { seg in
+            LineMark(x: .value("T", seg.start), y: .value("B", basalIcicleY(seg.rate)), series: .value("bs", "scheduled-basal"))
+            LineMark(x: .value("T", seg.end), y: .value("B", basalIcicleY(seg.rate)), series: .value("bs", "scheduled-basal"))
+        }
+        .foregroundStyle(Self.basalColor.opacity(0.85))
+        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
         ForEach(readingsInWindow.reversed()) { r in
             LineMark(x: .value("T", r.date), y: .value("G", yVal(Double(r.mgdl))))
         }
@@ -564,62 +587,6 @@ struct HomeView: View {
         .frame(height: 90)
         .overlay(alignment: .topLeading) {
             Text("COB").font(.caption2).bold().foregroundColor(.orange)
-                .padding(.leading, 6).padding(.top, 4)
-        }
-    }
-
-    private var basalChart: some View {
-        let scheduled = basalSegmentsInWindow
-        let actual = actualBasalSegmentsInWindow
-        let yMax = max((scheduled.map(\.rate) + actual.map(\.rate)).max() ?? 0.5, 0.5) * 1.2
-        let tempStarts = tempBasalTreatmentsInWindow.filter { $0.date > cutoff && ($0.durationMin ?? 0) > 0 }
-        return Chart {
-            ForEach(scheduled) { seg in
-                RectangleMark(
-                    xStart: .value("T", seg.start), xEnd: .value("T", seg.end),
-                    yStart: .value("B", 0.0), yEnd: .value("R", seg.rate)
-                )
-            }
-            .foregroundStyle(Color.teal.opacity(0.18))
-            ForEach(scheduled) { seg in
-                LineMark(x: .value("T", seg.start), y: .value("R", seg.rate), series: .value("s", "scheduled"))
-                LineMark(x: .value("T", seg.end), y: .value("R", seg.rate), series: .value("s", "scheduled"))
-            }
-            .foregroundStyle(Color.teal.opacity(0.7))
-            .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
-
-            ForEach(actual) { seg in
-                RectangleMark(
-                    xStart: .value("T", seg.start), xEnd: .value("T", seg.end),
-                    yStart: .value("B", 0.0), yEnd: .value("R", seg.rate)
-                )
-            }
-            .foregroundStyle(Color.teal.opacity(0.55))
-
-            ForEach(tempStarts, id: \.id) { t in
-                PointMark(x: .value("T", t.date), y: .value("R", 0.0))
-                    .symbol {
-                        Image(systemName: "arrowtriangle.up.fill").font(.system(size: 7))
-                            .foregroundStyle((t.absolute ?? 1) <= 0.001 || t.tempBasalPercent == 0 ? Color.red.opacity(0.8) : Color.teal)
-                    }
-            }
-
-            RuleMark(y: .value("Zero", 0.0))
-                .foregroundStyle(Color.secondary.opacity(0.35))
-                .lineStyle(StrokeStyle(lineWidth: 0.5))
-        }
-        .chartXScale(domain: cutoff...chartXEnd)
-        .chartYScale(domain: 0...yMax)
-        .chartXAxis(.hidden)
-        .chartYAxis {
-            AxisMarks(values: .automatic(desiredCount: 3)) { _ in
-                AxisGridLine().foregroundStyle(Color.white.opacity(0.1))
-                AxisValueLabel { EmptyView() }
-            }
-        }
-        .frame(height: 90)
-        .overlay(alignment: .topLeading) {
-            Text("BASAL").font(.caption2).bold().foregroundColor(.teal)
                 .padding(.leading, 6).padding(.top, 4)
         }
     }
