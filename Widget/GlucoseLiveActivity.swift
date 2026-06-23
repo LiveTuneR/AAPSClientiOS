@@ -11,7 +11,7 @@ struct GlucoseLiveActivity: Widget {
                 Text(trend(context.state))
                 Spacer()
                 if let iob = context.state.iob { Text(String(format: "IOB %.1f", iob)).font(.caption) }
-                Text(ago(context.state)).font(.caption2).foregroundStyle(.secondary)
+                Text(context.state.date, style: .relative).font(.caption2).foregroundStyle(.secondary)
             }
             .padding()
         } dynamicIsland: { context in
@@ -27,7 +27,7 @@ struct GlucoseLiveActivity: Widget {
                         if let d = context.state.delta { Text(delta(d, context.state)) }
                         Spacer()
                         if let iob = context.state.iob { Text(String(format: "IOB %.1f", iob)) }
-                        Text(ago(context.state)).foregroundStyle(.secondary)
+                        Text(context.state.date, style: .relative).foregroundStyle(.secondary)
                     }.font(.caption)
                 }
             } compactLeading: {
@@ -51,8 +51,5 @@ struct GlucoseLiveActivity: Widget {
     }
     private func delta(_ d: Int, _ s: GlucoseActivityAttributes.ContentState) -> String {
         (d >= 0 ? "+" : "−") + Formatting.format(abs(d), units: units(s))
-    }
-    private func ago(_ s: GlucoseActivityAttributes.ContentState) -> String {
-        "\(max(0, Int(Date().timeIntervalSince(s.date) / 60))) min"
     }
 }
