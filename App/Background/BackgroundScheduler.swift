@@ -37,8 +37,8 @@ final class BackgroundScheduler {
 
     func register() {
         guard !isRunningOnMac else { return }
-        scheduler.register(forTaskWithIdentifier: Self.refreshTaskId, using: nil) { task in
-            self.handleRefresh(task as! BGAppRefreshTask)
+        scheduler.register(forTaskWithIdentifier: Self.refreshTaskId, using: nil) { [weak self] task in
+            self?.handleRefresh(task as! BGAppRefreshTask)
         }
     }
 

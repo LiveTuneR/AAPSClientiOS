@@ -107,9 +107,73 @@
 
 ---
 
-## Known Issues (остались)
+## 8. Sendable compliance
+
+### 8.1 NightscoutClient → Sendable
+
+**Файл:** `Shared/Network/NightscoutClient.swift`
+
+Протокол теперь наследует `Sendable`. `UnconfiguredClient` помечен `@unchecked Sendable`.
+
+### 8.2 NsTreatmentWriter → Sendable
+
+**Файлы:** `App/Treatments/NsTreatmentWriter.swift`, `NsTreatmentWriterLive.swift`
+
+Протокол и реализация помечены `Sendable`. `NsTreatmentWriterLive` теперь принимает `clientProvider` closure вместо фиксированного `client` — ссылка на клиент всегда актуальна после `reconnect()`.
+
+---
+
+## 9. LiveActivityController → @MainActor
+
+**Файл:** `App/Domain/LiveActivityController.swift`
+
+Класс помечен `@MainActor` — все обращения к `activity` сериализуются через main thread.
+
+---
+
+## 10. AppStore → @MainActor
+
+**Файл:** `App/State/AppStore.swift`
+
+Класс помечен `@MainActor`. Убраны все `await MainActor.run { ... }` обёртки в `refresh()` — мутации `@Published` свойств теперь гарантированно на main thread.
+
+---
+
+## 11. Pagination дедупликация
+
+**Файл:** `Shared/Network/NightscoutClientLive.swift`
+
+`fetchEntries(sinceDays:)` теперь отслеживает `seenDates: Set<Date>` и пропускает дубликаты на границах страниц.
+
+---
+
+## 12. Profile switch duration
+
+**Файл:** `App/UI/ProfileView.swift`
+
+`switchDur` по умолчанию `"1440"` (24ч). Валидация: `dur > 0` вместо `dur >= 0`.
+
+---
+
+## 13. BackgroundScheduler weak self
+
+**Файл:** `App/Background/BackgroundScheduler.swift`
+
+Launch handler захватывает `[weak self]` вместо сильного `self`.
+
+---
+
+## 14. Transport errors
+
+**Файл:** `Shared/Network/NightscoutClientLive.swift`
+
+`NsError` ошибки теперь пробрасываются как есть (не конвертируются в `.noNetwork`).
+
+---
+
+## Known Issues
 
 | Проблема | Приоритет | Описание |
 |----------|-----------|----------|
-| StatisticsView ошибка fetch | Medium | `try?` проглатывает ошибки, chart пуст без feedback |
+| StatisticsView ошибка fetch | Low | `try?` проглатывает ошибки, chart пуст без feedback |
 | AlarmEngine пороги | Low | Heuristic `< 30` для единиц всё ещё используется в `HomeView.baseTargetMgdl()` и `targetTimeline()` |

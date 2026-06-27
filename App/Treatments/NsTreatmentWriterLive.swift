@@ -1,16 +1,16 @@
 import Foundation
 
-final class NsTreatmentWriterLive: NsTreatmentWriter {
+final class NsTreatmentWriterLive: NsTreatmentWriter, @unchecked Sendable {
     /// Identifier used for both `app` (required by NS API v3) and `enteredBy`.
     static let appName = "AAPSClient-iOS"
 
-    private let clientProvider: () -> NightscoutClient
+    private nonisolated(unsafe) let clientProvider: () -> NightscoutClient
 
     init(client: NightscoutClient) {
         self.clientProvider = { client }
     }
 
-    init(clientProvider: @escaping @Sendable () -> NightscoutClient) {
+    init(clientProvider: @escaping () -> NightscoutClient) {
         self.clientProvider = clientProvider
     }
 

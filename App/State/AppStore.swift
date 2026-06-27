@@ -12,7 +12,7 @@ enum RefreshError: LocalizedError {
     }
 }
 
-final class AppStore: ObservableObject {
+@MainActor final class AppStore: ObservableObject {
     @Published var readings: [GlucoseReading] = []
     @Published var treatments: [Treatment] = []
     @Published var loopStatus: LoopStatus?
@@ -126,63 +126,55 @@ final class AppStore: ObservableObject {
         var firstError: Error?
         var entriesOk = false
 
-        defer { if entriesOk { Task { @MainActor in updateSharedSnapshot() } } }
+        defer { if entriesOk { updateSharedSnapshot() } }
 
         // Assign each piece independently — a partial failure keeps previously loaded data.
         do {
             let r = try await client.fetchEntries(limit: 288)
-            await MainActor.run { readings = r }
+            readings = r
             entriesOk = true
         } catch is CancellationError { return }
         catch { firstError = firstError ?? RefreshError.stage("entries", error) }
 
         do {
             let t = try await client.fetchTreatments(since: nil)
-            await MainActor.run { treatments = t }
+            treatments = t
         } catch is CancellationError { return }
         catch { firstError = firstError ?? RefreshError.stage("treatments", error) }
 
         do {
             let s = try await client.fetchDeviceStatus()
-            await MainActor.run { loopStatus = s }
+            loopStatus = s
         } catch is CancellationError { return }
         catch { firstError = firstError ?? RefreshError.stage("devicestatus", error) }
 
         if let p = try? await client.fetchProfile() {
-            await MainActor.run { profile = p }
+            profile = p
         }
 
         if let ps = try? await client.fetchProfileStore() {
-            await MainActor.run { profileStore = ps }
+            profileStore = ps
         }
 
         if let care = try? await client.fetchCareEvents() {
-            await MainActor.run { careEvents = care }
+            careEvents = care
         }
 
         if let history = try? await client.fetchDeviceStatusHistory(since: Date().addingTimeInterval(-12 * 3600)) {
-            await MainActor.run { deviceStatusHistory = history }
+            deviceStatusHistory = history
         }
 
-        var capturedReading: GlucoseReading?
-        var capturedLastRefresh = lastRefresh
-        var capturedThresholds = thresholds
-        await MainActor.run {
-            connectionLost = firstError != nil
-            if entriesOk {
-                lastRefresh = Date()
-                capturedReading = readings.first
-                capturedLastRefresh = lastRefresh
-                capturedThresholds = thresholds
-            }
+        connectionLost = firstError != nil
+        if entriesOk {
+            lastRefresh = Date()
         }
 
-        if let reading = capturedReading,
+        if let reading = readings.first,
            let alarm = alarmEngine.evaluate(
                latest: reading,
-               lastUpdate: capturedLastRefresh,
+               lastUpdate: lastRefresh,
                now: Date(),
-               thresholds: capturedThresholds
+               thresholds: thresholds
            ), alarm != .connectionLost {
             alarmEngine.schedule(alarm)
         }

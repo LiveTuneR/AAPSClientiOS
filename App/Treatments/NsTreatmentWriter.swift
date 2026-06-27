@@ -1,6 +1,6 @@
 import Foundation
 
-protocol NsTreatmentWriter {
+protocol NsTreatmentWriter: Sendable {
     func sendCarbs(grams: Double, at date: Date) async throws
     func sendTempTarget(targetMgdl: Int, durationMin: Int, reason: TtReason) async throws
     func cancelTempTarget() async throws

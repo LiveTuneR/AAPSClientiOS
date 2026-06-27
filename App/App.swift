@@ -72,7 +72,7 @@ struct AAPSClientApp: App {
             }
             .task {
                 bgScheduler.schedule()
-                try? await UNUserNotificationCenter.current()
+                _ = try? await UNUserNotificationCenter.current()
                     .requestAuthorization(options: [.alert, .sound, .badge])
                 // Initial data refresh is owned by HomeView (.task) so errors surface there.
                 // Start foreground polling here too: `.onChange(of: scenePhase)` only fires on
@@ -98,7 +98,7 @@ struct AAPSClientApp: App {
     }
 }
 
-final class UnconfiguredClient: NightscoutClient {
+final class UnconfiguredClient: NightscoutClient, @unchecked Sendable {
     func authorize() async throws { throw NsError.badURL }
     func fetchEntries(limit: Int) async throws -> [GlucoseReading] { throw NsError.badURL }
     func fetchTreatments(since: Date?) async throws -> [Treatment] { throw NsError.badURL }

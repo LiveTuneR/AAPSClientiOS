@@ -6,7 +6,7 @@ import os
 /// fire while the app process is alive (foreground or background refresh). No
 /// push server, so the activity goes stale when the app is not running.
 @available(iOS 16.1, *)
-final class LiveActivityController {
+@MainActor final class LiveActivityController {
     static let shared = LiveActivityController()
     private var activity: Activity<GlucoseActivityAttributes>?
     private let log = Logger(subsystem: "com.nightaps.aapsclientios", category: "LiveActivity")

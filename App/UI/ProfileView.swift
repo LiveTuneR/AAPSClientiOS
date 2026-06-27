@@ -8,7 +8,7 @@ struct ProfileView: View {
     @State private var switchTarget: ProfileSelection?
     @State private var editTarget: ProfileSelection?
     @State private var switchPct = "100"
-    @State private var switchDur = "0"
+    @State private var switchDur = "1440"
     @State private var statusMessage: String?
     @State private var statusIsError = false
 
@@ -95,7 +95,7 @@ struct ProfileView: View {
 
     private func switchTo(_ name: String) {
         guard let pct = Int(switchPct), (30...250).contains(pct),
-              let dur = Int(switchDur), dur >= 0 else { return }
+              let dur = Int(switchDur), dur > 0 else { return }
         let json = store.profileStore?.rawJson[name]
         Task {
             do {

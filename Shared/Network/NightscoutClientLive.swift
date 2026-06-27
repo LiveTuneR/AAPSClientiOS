@@ -71,13 +71,16 @@ actor NightscoutClientLive: NightscoutClient {
         let cutoffMs = Int64(Date().addingTimeInterval(-Double(days) * 86400).timeIntervalSince1970 * 1000)
         let pageSize = 1000
         var all: [GlucoseReading] = []
+        var seenDates = Set<Date>()
         var skip = 0
         for _ in 0..<200 {
             let path = "api/v3/entries?sort$desc=date&limit=\(pageSize)&skip=\(skip)&date$gt=\(cutoffMs)"
             let data = try await get(path)
             let page = try NsMapping.glucose(from: data)
             if page.isEmpty { break }
-            all.append(contentsOf: page)
+            for entry in page where seenDates.insert(entry.date).inserted {
+                all.append(entry)
+            }
             skip += page.count
         }
         return all
@@ -163,6 +166,8 @@ actor NightscoutClientLive: NightscoutClient {
             throw CancellationError()
         } catch let urlError as URLError where urlError.code == .cancelled {
             throw CancellationError()
+        } catch let error as NsError {
+            throw error
         } catch {
             throw NsError.noNetwork
         }

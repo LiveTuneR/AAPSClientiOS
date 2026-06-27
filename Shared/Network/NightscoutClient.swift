@@ -1,6 +1,6 @@
 import Foundation
 
-protocol NightscoutClient {
+protocol NightscoutClient: Sendable {
     func authorize() async throws
     func fetchEntries(limit: Int) async throws -> [GlucoseReading]
     func fetchTreatments(since: Date?) async throws -> [Treatment]
