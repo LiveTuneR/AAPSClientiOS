@@ -7,7 +7,7 @@ struct ProfileEditView: View {
     let profileName: String
     let rawJson: String
 
-    private let profile: NsProfile
+    private let profile: NsProfile?
     private let profileUnits: GlucoseUnits
 
     @State private var basalBlocks: [EditableBlock]
@@ -37,46 +37,61 @@ struct ProfileEditView: View {
         self.profileName = profileName
         self.rawJson = rawJson
 
-        guard let data = rawJson.data(using: .utf8),
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            fatalError("Invalid profile JSON")
+        let empty = [EditableBlock(startSeconds: 0, valueString: "0")]
+        let parsed: NsProfile?
+        let pUnits: GlucoseUnits
+        let bBlocks: [EditableBlock]
+        let iBlocks: [EditableBlock]
+        let cBlocks: [EditableBlock]
+        let tlBlocks: [EditableBlock]
+        let thBlocks: [EditableBlock]
+
+        if let data = rawJson.data(using: .utf8),
+           let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            let p = NsMapping.parseProfileObject(obj)
+            parsed = p
+            pUnits = p.units
+            let du = store.displayUnits
+            func blocks(_ entries: [ScheduledValue], schedule: String) -> [EditableBlock] {
+                entries.map { EditableBlock(startSeconds: $0.startSeconds,
+                                           valueString: Self.formatDisplay($0.value, schedule: schedule, profileUnits: p.units, displayUnits: du)) }
+            }
+            func basalEntries(_ entries: [BasalEntry]) -> [EditableBlock] {
+                entries.map { EditableBlock(startSeconds: $0.startSeconds,
+                                           valueString: Self.formatDisplay($0.rate, schedule: "basal", profileUnits: p.units, displayUnits: du)) }
+            }
+            bBlocks = basalEntries(p.basal)
+            iBlocks = blocks(p.sensitivity, schedule: "sens")
+            cBlocks = blocks(p.carbRatio, schedule: "carbratio")
+            tlBlocks = blocks(p.targetLow, schedule: "target")
+            thBlocks = blocks(p.targetHigh, schedule: "target")
+        } else {
+            parsed = nil
+            pUnits = .mgdl
+            bBlocks = empty; iBlocks = empty; cBlocks = empty
+            tlBlocks = empty; thBlocks = empty
         }
-        let parsed = NsMapping.parseProfileObject(obj)
-        profile = parsed
-        profileUnits = parsed.units
-        let du = store.displayUnits
-
-        func blocks(_ entries: [ScheduledValue], schedule: String) -> [EditableBlock] {
-            entries.map { EditableBlock(startSeconds: $0.startSeconds,
-                                         valueString: Self.formatDisplay($0.value, schedule: schedule, profileUnits: parsed.units, displayUnits: du)) }
-        }
-        func basalEntries(_ entries: [BasalEntry]) -> [EditableBlock] {
-            entries.map { EditableBlock(startSeconds: $0.startSeconds,
-                                         valueString: Self.formatDisplay($0.rate, schedule: "basal", profileUnits: parsed.units, displayUnits: du)) }
-        }
-
-        let basal = basalEntries(parsed.basal)
-        let isf = blocks(parsed.sensitivity, schedule: "sens")
-        let icr = blocks(parsed.carbRatio, schedule: "carbratio")
-        let tLow = blocks(parsed.targetLow, schedule: "target")
-        let tHigh = blocks(parsed.targetHigh, schedule: "target")
-
-        _basalBlocks = State(initialValue: basal)
-        _isfBlocks = State(initialValue: isf)
-        _icrBlocks = State(initialValue: icr)
-        _targetLowBlocks = State(initialValue: tLow)
-        _targetHighBlocks = State(initialValue: tHigh)
-
-        origBasal = basal
-        origIsf = isf
-        origIcr = icr
-        origTargetLow = tLow
-        origTargetHigh = tHigh
+        self.profile = parsed
+        self.profileUnits = pUnits
+        _basalBlocks = State(initialValue: bBlocks)
+        _isfBlocks = State(initialValue: iBlocks)
+        _icrBlocks = State(initialValue: cBlocks)
+        _targetLowBlocks = State(initialValue: tlBlocks)
+        _targetHighBlocks = State(initialValue: thBlocks)
+        origBasal = bBlocks
+        origIsf = iBlocks
+        origIcr = cBlocks
+        origTargetLow = tlBlocks
+        origTargetHigh = thBlocks
     }
 
     var body: some View {
         NavigationStack {
             Form {
+                if profile == nil {
+                    Text("Failed to load profile data")
+                        .foregroundColor(.red)
+                } else {
                 editableSection(String(localized: "edit.basal"), $basalBlocks, schedule: "basal", chartColor: .blue, unitLabel: "U/h")
                 editableSection(String(localized: "edit.isf"), $isfBlocks, schedule: "sens", chartColor: .orange, unitLabel: store.displayUnits.rawValue)
                 editableSection(String(localized: "edit.ic"), $icrBlocks, schedule: "carbratio", chartColor: .purple, unitLabel: "g/U")
@@ -102,6 +117,7 @@ struct ProfileEditView: View {
                         Text(msg)
                             .foregroundColor(statusIsError ? .red : .green)
                     }
+                }
                 }
             }
             .navigationTitle(String(format: String(localized: "edit.title"), profileName))

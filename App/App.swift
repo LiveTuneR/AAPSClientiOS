@@ -16,8 +16,17 @@ struct AAPSClientApp: App {
         // them. Seed it once from the legacy default-group location (copy-only).
         let keychain = SharedConstants.credentialKeychain()
         try? SharedConstants.legacyKeychain().migrate(to: keychain)
-        let nsUrl = ((try? keychain.get(.nsUrl)) ?? nil).flatMap(AppStore.normalizedURL)
+        let rawUrl = (try? keychain.get(.nsUrl)) ?? nil
+        let nsUrl = rawUrl.flatMap(AppStore.normalizedURL)
         let accessToken = (try? keychain.get(.nsAccessToken)) ?? ""
+
+        // Self-heal accessibility for installs whose credentials were written by an
+        // earlier build with the default WhenUnlocked class: re-set the values we just
+        // read so they're rewritten as AfterFirstUnlock. Only runs when the device is
+        // unlocked (otherwise the reads above already returned nil); harmless and
+        // idempotent thereafter.
+        if let rawUrl { try? keychain.set(rawUrl, for: .nsUrl) }
+        if !accessToken.isEmpty { try? keychain.set(accessToken, for: .nsAccessToken) }
 
         let client: NightscoutClient
         if let url = nsUrl, !accessToken.isEmpty {
@@ -29,7 +38,7 @@ struct AAPSClientApp: App {
         let alarmEngine = AlarmEngineLive(notifier: UNNotifier())
         let store = AppStore(client: client, alarmEngine: alarmEngine)
         _store = StateObject(wrappedValue: store)
-        writer = NsTreatmentWriterLive(client: client)
+        writer = NsTreatmentWriterLive(clientProvider: { [store] in store.client })
         bgScheduler = BackgroundScheduler(store: store)
         // BGTaskScheduler launch handlers MUST be registered before the app finishes
         // launching. Registering from a SwiftUI `.task` (post-launch) throws an
@@ -66,6 +75,12 @@ struct AAPSClientApp: App {
                 try? await UNUserNotificationCenter.current()
                     .requestAuthorization(options: [.alert, .sound, .badge])
                 // Initial data refresh is owned by HomeView (.task) so errors surface there.
+                // Start foreground polling here too: `.onChange(of: scenePhase)` only fires on
+                // a transition observed *after* this view mounts, and on a cold launch the
+                // scene is already `.active` by the time it mounts — so that handler's
+                // `.active` case never fires and the 60 s timer never starts until the user
+                // backgrounds/foregrounds the app at least once.
+                keepAlive.enterForeground { Task { await store.refreshIfStale() } }
             }
             .onChange(of: scenePhase) { phase in
                 switch phase {

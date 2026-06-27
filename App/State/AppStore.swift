@@ -25,36 +25,37 @@ final class AppStore: ObservableObject {
     @Published var deviceStatusHistory: [DeviceStatusEntry] = []
 
     var activeProfileSwitch: Treatment? {
-        // Profile switches are infrequent → may be outside the general treatments window.
-        // careEvents includes a dedicated "Profile Switch" query, so search there too.
         (careEvents + treatments)
             .filter { $0.eventType == "Profile Switch" }
             .max(by: { $0.date < $1.date })
     }
 
-    /// Active profile name — from latest Profile Switch, else profile store default.
     var activeProfileName: String? {
         activeProfileSwitch?.profileName ?? profileStore?.defaultProfileName
     }
 
     let alarmEngine: AlarmEngine
-    var client: NightscoutClient
+    private var _client: NightscoutClient
+    private let clientLock = NSLock()
+    var client: NightscoutClient {
+        get { clientLock.lock(); defer { clientLock.unlock() }; return _client }
+        set { clientLock.lock(); _client = newValue; clientLock.unlock() }
+    }
     private(set) var lastRefresh = Date.distantPast
-    private let sharedStore = SharedStore()
+    private let sharedStore: SharedStore
+    private var lastPushedReadingDate: Date?
 
-    /// Data older than this is considered stale and worth refetching.
     var isStale: Bool { Date().timeIntervalSince(lastRefresh) > 60 }
 
-    /// Refresh only if cached data is stale — used on view appear / app activation so switching
-    /// tabs doesn't refetch. Pull-to-refresh bypasses this by calling refresh() directly.
     func refreshIfStale() async {
         guard isStale else { return }
         try? await refresh()
     }
 
-    init(client: NightscoutClient, alarmEngine: AlarmEngine) {
-        self.client = client
+    init(client: NightscoutClient, alarmEngine: AlarmEngine, sharedStore: SharedStore = SharedStore()) {
+        self._client = client
         self.alarmEngine = alarmEngine
+        self.sharedStore = sharedStore
         self.thresholds = Self.loadThresholds()
         self.displayUnits = Self.loadDisplayUnits()
         ensureConfigured()
@@ -89,7 +90,8 @@ final class AppStore: ObservableObject {
     func setDisplayUnits(_ units: GlucoseUnits) {
         displayUnits = units
         UserDefaults.standard.set(units.rawValue, forKey: "display.glucoseUnits")
-        updateSharedSnapshot()
+        // Force a push: the reading is unchanged but the rendered units differ.
+        updateSharedSnapshot(force: true)
     }
 
     private static func loadDisplayUnits() -> GlucoseUnits {
@@ -123,6 +125,8 @@ final class AppStore: ObservableObject {
         ensureConfigured()
         var firstError: Error?
         var entriesOk = false
+
+        defer { if entriesOk { Task { @MainActor in updateSharedSnapshot() } } }
 
         // Assign each piece independently — a partial failure keeps previously loaded data.
         do {
@@ -160,19 +164,30 @@ final class AppStore: ObservableObject {
             await MainActor.run { deviceStatusHistory = history }
         }
 
+        var capturedReading: GlucoseReading?
+        var capturedLastRefresh = lastRefresh
+        var capturedThresholds = thresholds
         await MainActor.run {
             connectionLost = firstError != nil
-            if entriesOk { lastRefresh = Date() }
+            if entriesOk {
+                lastRefresh = Date()
+                capturedReading = readings.first
+                capturedLastRefresh = lastRefresh
+                capturedThresholds = thresholds
+            }
         }
 
-        evaluateAlarms()
+        if let reading = capturedReading,
+           let alarm = alarmEngine.evaluate(
+               latest: reading,
+               lastUpdate: capturedLastRefresh,
+               now: Date(),
+               thresholds: capturedThresholds
+           ), alarm != .connectionLost {
+            alarmEngine.schedule(alarm)
+        }
 
-        // Glucose is the priority surface: push fresh readings to the widget and
-        // Live Activity whenever entries succeeded, even if another stage
-        // (devicestatus/treatments) failed. Otherwise a partial failure throws
-        // below and freezes the widget/LA while the in-app screen shows new data.
-        if entriesOk { updateSharedSnapshot() }
-
+        // Snapshot mirroring runs via the `defer` above on every exit path.
         if let firstError {
             alarmEngine.schedule(.connectionLost)
             throw firstError
@@ -180,7 +195,21 @@ final class AppStore: ObservableObject {
     }
 
     /// Mirror the latest reading + display config into the App Group for the widget.
-    func updateSharedSnapshot() {
+    ///
+    /// The snapshot is always persisted so the widget's timeline provider reads the
+    /// freshest data whenever the system next asks for it. The *pushes* (widget
+    /// reload + Live Activity update), however, fire only when the reading actually
+    /// changed — or when `force` is set for a config change.
+    ///
+    /// Why: ActivityKit throttles `Activity.update()` beyond a per-hour budget. The
+    /// foreground/background poll runs every 60 s, but a new CGM reading only lands
+    /// every ~5 min, so ~4 of every 5 polls carry an identical reading. Pushing each
+    /// of those burned the budget; once exhausted, ActivityKit silently dropped
+    /// subsequent updates and the Live Activity froze on an old reading while the
+    /// in-app screen stayed fresh. Pushing only on change drops us to ~12/hour (CGM
+    /// cadence) — under budget — and the LA's `.relative` age text ticks on its own
+    /// between pushes, so it still looks live.
+    func updateSharedSnapshot(force: Bool = false) {
         sharedStore.saveConfig(DisplayConfig(units: displayUnits, thresholds: thresholds))
         guard let latest = readings.first else { return }
         let delta = readings.count >= 2 ? latest.mgdl - readings[1].mgdl : nil
@@ -189,43 +218,32 @@ final class AppStore: ObservableObject {
             iob: loopStatus?.iob, cob: loopStatus?.cob
         )
         sharedStore.saveSnapshot(snap)
+
+        guard force || latest.date != lastPushedReadingDate else { return }
+        lastPushedReadingDate = latest.date
         WidgetCenter.shared.reloadAllTimelines()
 
-        if #available(iOS 16.1, *), let latest = readings.first {
-            LiveActivityController.shared.update(
-                GlucoseActivityAttributes.ContentState(
-                    mgdl: latest.mgdl, trendRaw: latest.trend.rawValue,
-                    delta: readings.count >= 2 ? latest.mgdl - readings[1].mgdl : nil,
-                    date: latest.date, iob: loopStatus?.iob, unitsRaw: displayUnits.rawValue
-                )
-            )
+        if #available(iOS 16.1, *) {
+            LiveActivityController.shared.update(makeLAContentState())
         }
     }
 
     @available(iOS 16.1, *)
     func setLiveActivityEnabled(_ on: Bool) {
         guard on else { LiveActivityController.shared.stop(); return }
-        guard let latest = readings.first else { return }
-        LiveActivityController.shared.start(
-            with: GlucoseActivityAttributes.ContentState(
-                mgdl: latest.mgdl, trendRaw: latest.trend.rawValue,
-                delta: readings.count >= 2 ? latest.mgdl - readings[1].mgdl : nil,
-                date: latest.date, iob: loopStatus?.iob, unitsRaw: displayUnits.rawValue
-            )
+        guard !readings.isEmpty else { return }
+        LiveActivityController.shared.start(with: makeLAContentState())
+    }
+
+    @available(iOS 16.1, *)
+    private func makeLAContentState() -> GlucoseActivityAttributes.ContentState {
+        let latest = readings[0]
+        let delta = readings.count >= 2 ? latest.mgdl - readings[1].mgdl : nil
+        return GlucoseActivityAttributes.ContentState(
+            mgdl: latest.mgdl, trendRaw: latest.trend.rawValue,
+            delta: delta,
+            date: latest.date, iob: loopStatus?.iob, unitsRaw: displayUnits.rawValue
         )
     }
 
-    private func evaluateAlarms() {
-        guard let alarm = alarmEngine.evaluate(
-            latest: readings.first,
-            lastUpdate: lastRefresh,
-            now: Date(),
-            thresholds: thresholds
-        ) else { return }
-
-        if alarm == .connectionLost {
-            return
-        }
-        alarmEngine.schedule(alarm)
-    }
 }

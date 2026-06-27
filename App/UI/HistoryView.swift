@@ -43,7 +43,7 @@ struct HistoryView: View {
 
     private func targetText(lo: Int, hi: Int) -> String {
         func conv(_ v: Int) -> String {
-            units == .mmol ? String(format: "%.1f", Double(v) / 18.0182) : "\(v)"
+            units == .mmol ? String(format: "%.1f", Double(v) / glucoseMmolFactor) : "\(v)"
         }
         let suffix = units == .mmol ? "mmol/l" : "mg/dl"
         return lo == hi ? "\(conv(lo)) \(suffix)" : "\(conv(lo))–\(conv(hi)) \(suffix)"

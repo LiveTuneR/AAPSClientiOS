@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import os
 
 /// Keeps the app alive in the background using a silent AVAudioEngine session.
 ///
@@ -15,13 +16,19 @@ final class AudioKeepAlive {
     /// user is looking at the app. The tick is cheap because it calls
     /// `refreshIfStale()`, which no-ops unless data is older than 60 s.
     static let foregroundInterval: TimeInterval = 60
-    /// Background cadence: matches the CGM upload interval; the audio session keeps
-    /// the app alive so this timer keeps firing while backgrounded.
-    static let backgroundInterval: TimeInterval = 5 * 60
+    /// Background cadence: same 60 s. The audio session already keeps the process
+    /// alive around the clock, so a slower background poll buys no battery savings —
+    /// it only raises the staleness ceiling: a 5-minute poll beating against the
+    /// ~5-minute CGM cadence let the Live Activity's reading age climb to ~9-11 min
+    /// before the next fetch. ActivityKit applies each update() immediately (no
+    /// rate budget like WidgetKit), so polling every 60 s keeps the LA within roughly
+    /// one CGM interval of the latest reading.
+    static let backgroundInterval: TimeInterval = 60
 
     private let engine = AVAudioEngine()
+    private let player = AVAudioPlayerNode()
     private var timer: Timer?
-    private var started = false
+    private let log = Logger(subsystem: "com.nightaps.aapsclientios", category: "KeepAlive")
 
     /// BackgroundTasks-style guard: the audio keep-alive only makes sense on iOS,
     /// where the app gets suspended in the background. On Mac ("Designed for iPad")
@@ -47,16 +54,45 @@ final class AudioKeepAlive {
     }
 
     private func startEngine() {
-        guard isAudioKeepAliveEnabled, !engine.isRunning else { return }
+        guard isAudioKeepAliveEnabled, !player.isPlaying else { return }
         do {
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(.playback, options: [.mixWithOthers])
             try session.setActive(true)
             engine.mainMixerNode.outputVolume = 0
-            try engine.start()
+
+            if player.engine == nil {
+                // `engine.attachedNodes` is NOT a reliable "have I attached player yet?"
+                // check — accessing `engine.mainMixerNode` above already lazily attaches
+                // the mixer/output nodes, so `attachedNodes.isEmpty` is false before we
+                // ever attach `player`. That left `player` permanently unattached, and
+                // calling `play()`/`scheduleBuffer` on an unattached node raises an
+                // uncaught ObjC exception — an instant crash on every launch.
+                engine.attach(player)
+                // Engine-native format keeps the connection format-agnostic across devices.
+                engine.connect(player, to: engine.mainMixerNode, format: engine.mainMixerNode.outputFormat(forBus: 0))
+            }
+            if !engine.isRunning { try engine.start() }
+
+            // CoreAudio only treats the app as "playing audio" — the thing that actually
+            // defers background suspension — while a node is rendering real samples.
+            // A merely-started, silent-volume engine with nothing scheduled produces no
+            // render activity, so iOS still suspends the process after the standard ~30 s
+            // background grace period and the keep-alive timer stops ticking.
+            let buffer = silentBuffer()
+            player.scheduleBuffer(buffer, at: nil, options: .loops)
+            player.play()
         } catch {
-            print("keepalive: audio session failed: \(error)")
+            log.error("audio keep-alive session failed: \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    private func silentBuffer() -> AVAudioPCMBuffer {
+        let format = engine.mainMixerNode.outputFormat(forBus: 0)
+        let frameCount = AVAudioFrameCount(format.sampleRate)  // 1 second, looped
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount)!
+        buffer.frameLength = frameCount
+        return buffer
     }
 
     private func scheduleTimer(interval: TimeInterval, onTick: @escaping () -> Void) {

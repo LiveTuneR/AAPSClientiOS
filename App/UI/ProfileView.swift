@@ -9,6 +9,8 @@ struct ProfileView: View {
     @State private var editTarget: ProfileSelection?
     @State private var switchPct = "100"
     @State private var switchDur = "0"
+    @State private var statusMessage: String?
+    @State private var statusIsError = false
 
     private var units: GlucoseUnits { store.displayUnits }
 
@@ -32,6 +34,10 @@ struct ProfileView: View {
                 }
             } else {
                 Text("No profile loaded")
+            }
+
+            if let msg = statusMessage {
+                Text(msg).foregroundColor(statusIsError ? .red : .green)
             }
         }
         .navigationTitle("Profile")
@@ -95,7 +101,12 @@ struct ProfileView: View {
             do {
                 try await writer.switchProfile(name: name, percentage: pct, durationMin: dur, profileJson: json)
                 try? await store.refresh()
-            } catch { }
+                statusMessage = "Profile switch sent"
+                statusIsError = false
+            } catch {
+                statusMessage = error.localizedDescription
+                statusIsError = true
+            }
         }
     }
 

@@ -14,14 +14,17 @@ final class AudioKeepAliveTests: XCTestCase {
         XCTAssertTrue(keepAlive.isAudioKeepAliveEnabled)
     }
 
-    // Foreground polls fast for a live UI/Live Activity; background drops to the
-    // CGM upload cadence to save battery and network.
-    func test_foreground_polls_faster_than_background() {
-        XCTAssertLessThan(AudioKeepAlive.foregroundInterval, AudioKeepAlive.backgroundInterval)
+    // Background polls at the same 60 s cadence as foreground: the audio session keeps
+    // the process alive regardless, so a slower background interval only raises the Live
+    // Activity's staleness ceiling (a 5-min poll beating the ~5-min CGM cadence pushed
+    // reading age to ~9-11 min). ActivityKit has no per-update rate budget, so 60 s keeps
+    // the LA within roughly one CGM interval of the latest reading.
+    func test_background_polls_as_fast_as_foreground() {
+        XCTAssertEqual(AudioKeepAlive.foregroundInterval, AudioKeepAlive.backgroundInterval)
     }
 
     func test_intervals_haveExpectedCadence() {
         XCTAssertEqual(AudioKeepAlive.foregroundInterval, 60)
-        XCTAssertEqual(AudioKeepAlive.backgroundInterval, 5 * 60)
+        XCTAssertEqual(AudioKeepAlive.backgroundInterval, 60)
     }
 }

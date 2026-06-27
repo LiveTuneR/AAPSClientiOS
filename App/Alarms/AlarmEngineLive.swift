@@ -8,6 +8,7 @@ protocol AlarmEngine {
 
 final class AlarmEngineLive: AlarmEngine {
     private var snoozed: [AlarmType: Date] = [:]
+    private let lock = NSLock()
     private let notifier: Notifier
 
     init(notifier: Notifier = DummyNotifier()) {
@@ -43,12 +44,17 @@ final class AlarmEngineLive: AlarmEngine {
     }
 
     func snooze(_ type: AlarmType, until: Date) {
+        lock.lock()
         snoozed[type] = until
+        lock.unlock()
         notifier.remove(identifier: type.identifier)
     }
 
     private func nonSnoozed(_ type: AlarmType, now: Date) -> AlarmType? {
-        if let until = snoozed[type], now < until {
+        lock.lock()
+        let until = snoozed[type]
+        lock.unlock()
+        if let until, now < until {
             return nil
         }
         return type

@@ -64,7 +64,7 @@ extension StatisticsCompute {
         var byHour: [Int: [Double]] = [:]
         for r in readings {
             let h = calendar.component(.hour, from: r.date)
-            let val = units == .mmol ? Double(r.mgdl) / 18.0182 : Double(r.mgdl)
+            let val = units == .mmol ? Double(r.mgdl) / glucoseMmolFactor : Double(r.mgdl)
             byHour[h, default: []].append(val)
         }
         // Compute percentiles for hours that have data.

@@ -20,6 +20,9 @@ final class MockAuthTransport: HttpTransport {
 final class FixtureNightscoutClient: NightscoutClient {
     var postedPayloads: [[String: Any]] = []
     var shouldThrow: Error?
+    /// Simulate a Task cancelled mid-refresh: entries succeed, later stages throw
+    /// CancellationError (the real-world trigger for the frozen widget/LA bug).
+    var cancelAfterEntries = false
 
     func authorize() async throws {
         if let error = shouldThrow { throw error }
@@ -32,12 +35,14 @@ final class FixtureNightscoutClient: NightscoutClient {
     }
 
     func fetchTreatments(since: Date?) async throws -> [Treatment] {
+        if cancelAfterEntries { throw CancellationError() }
         if let error = shouldThrow { throw error }
         let data = try loadFixture("treatments")
         return try NsMapping.treatments(from: data)
     }
 
     func fetchDeviceStatus() async throws -> LoopStatus? {
+        if cancelAfterEntries { throw CancellationError() }
         if let error = shouldThrow { throw error }
         let data = try loadFixture("devicestatus")
         return try NsMapping.loopStatus(from: data)

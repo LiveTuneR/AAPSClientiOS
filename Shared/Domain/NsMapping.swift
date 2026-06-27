@@ -195,7 +195,7 @@ enum NsMapping {
 
         func normalize(_ v: Double?) -> Int? {
             guard var value = v else { return nil }
-            if value < 40 { value *= 18.0182 }
+            if value < 40 { value *= glucoseMmolFactor }
             return Int(value.rounded())
         }
 

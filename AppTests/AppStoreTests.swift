@@ -111,6 +111,31 @@ final class AppStoreTests: XCTestCase {
         UserDefaults.standard.removeObject(forKey: "display.glucoseUnits")
     }
 
+    // Regression: a Task cancelled after entries succeed (SwiftUI .task on view
+    // disappear, overlapping foreground polls) must still mirror the fresh reading
+    // to the App Group + Live Activity. Previously refresh() returned on the
+    // CancellationError before updateSharedSnapshot(), freezing the widget/LA while
+    // the in-app screen showed new glucose.
+    func test_cancellationAfterEntries_stillMirrorsSnapshot() async throws {
+        let suiteName = "AppStoreTests.snapshot"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let shared = SharedStore(defaults: defaults)
+
+        let client = FixtureNightscoutClient()
+        client.cancelAfterEntries = true
+        let store = AppStore(client: client, alarmEngine: AlarmEngineLive(), sharedStore: shared)
+
+        try await store.refresh()  // returns early on the cancelled treatments stage
+
+        XCTAssertFalse(store.readings.isEmpty, "entries should have applied before cancellation")
+        let snap = shared.loadSnapshot()
+        XCTAssertNotNil(snap, "snapshot must be mirrored even when a later stage cancels")
+        XCTAssertEqual(snap?.mgdl, store.readings.first?.mgdl)
+
+        defaults.removePersistentDomain(forName: suiteName)
+    }
+
     func test_refreshPopulatesDeviceStatusHistory() async throws {
         let store = AppStore(client: FixtureNightscoutClient(), alarmEngine: AlarmEngineLive())
         try await store.refresh()

@@ -1,6 +1,6 @@
 import Foundation
 
-final class NightscoutClientLive: NightscoutClient {
+actor NightscoutClientLive: NightscoutClient {
     private let nsURL: String
     private let accessToken: String
     private let transport: HttpTransport
@@ -72,7 +72,7 @@ final class NightscoutClientLive: NightscoutClient {
         let pageSize = 1000
         var all: [GlucoseReading] = []
         var skip = 0
-        for _ in 0..<200 {  // safety cap: 200 pages × server-limit ≈ 100k readings
+        for _ in 0..<200 {
             let path = "api/v3/entries?sort$desc=date&limit=\(pageSize)&skip=\(skip)&date$gt=\(cutoffMs)"
             let data = try await get(path)
             let page = try NsMapping.glucose(from: data)

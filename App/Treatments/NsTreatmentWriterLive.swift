@@ -4,11 +4,17 @@ final class NsTreatmentWriterLive: NsTreatmentWriter {
     /// Identifier used for both `app` (required by NS API v3) and `enteredBy`.
     static let appName = "AAPSClient-iOS"
 
-    private let client: NightscoutClient
+    private let clientProvider: () -> NightscoutClient
 
     init(client: NightscoutClient) {
-        self.client = client
+        self.clientProvider = { client }
     }
+
+    init(clientProvider: @escaping @Sendable () -> NightscoutClient) {
+        self.clientProvider = clientProvider
+    }
+
+    private var client: NightscoutClient { clientProvider() }
 
     func sendCarbs(grams: Double, at date: Date) async throws {
         try await client.postTreatment(Self.buildCarbs(grams: grams, at: date))

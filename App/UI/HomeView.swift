@@ -343,9 +343,9 @@ struct HomeView: View {
 
     // MARK: - Chart
 
-    private func yVal(_ mgdl: Double) -> Double { units == .mmol ? mgdl / 18.0182 : mgdl }
+    private func yVal(_ mgdl: Double) -> Double { units == .mmol ? mgdl / glucoseMmolFactor : mgdl }
     // Lower bound at 30 to give bolus spikes room below urgentLow (55).
-    private var yDomain: ClosedRange<Double> { units == .mmol ? (30/18.0182)...(300/18.0182) : 30...300 }
+    private var yDomain: ClosedRange<Double> { units == .mmol ? (30/glucoseMmolFactor)...(300/glucoseMmolFactor) : 30...300 }
     private var chartXEnd: Date { predictionLines.flatMap { $0.points }.map { $0.0 }.max() ?? Date() }
 
     // Basal "icicles" hang from the top of the glucose chart; length is proportional to rate.
@@ -363,11 +363,11 @@ struct HomeView: View {
             .sorted { $0.date < $1.date }
     }
     /// Format a glucose-unit value (mg/dl) for display in selected units.
-    private func gv(_ mgdl: Double) -> String { units == .mmol ? String(format: "%.1f", mgdl / 18.0182) : String(format: "%.0f", mgdl) }
+    private func gv(_ mgdl: Double) -> String { units == .mmol ? String(format: "%.1f", mgdl / glucoseMmolFactor) : String(format: "%.0f", mgdl) }
 
     private func deltaString(_ d: Int) -> String {
         if units == .mmol {
-            let v = Double(d) / 18.0182
+            let v = Double(d) / glucoseMmolFactor
             return v >= 0 ? String(format: "+%.1f", v) : String(format: "%.1f", v)
         }
         return d >= 0 ? "+\(d)" : "\(d)"
@@ -377,7 +377,7 @@ struct HomeView: View {
     private func baseTargetMgdl() -> Double {
         if let p = store.profile, let lo = p.targetLow.first?.value, let hi = p.targetHigh.first?.value {
             var b = (lo + hi) / 2
-            if b < 40 { b *= 18.0182 }   // profile may be in mmol → normalize
+            if b < 40 { b *= glucoseMmolFactor }   // profile may be in mmol → normalize
             return b
         }
         return 108
@@ -391,7 +391,7 @@ struct HomeView: View {
         let tts = ttInWindow.compactMap { t -> (Date, Date, Double)? in
             guard let dur = t.durationMin, let any = t.targetBottom ?? t.targetTop else { return nil }
             var mid = (Double(t.targetBottom ?? any) + Double(t.targetTop ?? any)) / 2
-            if mid < 40 { mid *= 18.0182 }
+            if mid < 40 { mid *= glucoseMmolFactor }
             let s = max(t.date, cutoff)
             let e = min(t.date.addingTimeInterval(Double(dur) * 60), chartXEnd)
             return e > s ? (s, e, mid) : nil
@@ -657,6 +657,11 @@ struct HomeView: View {
                 Button("action.cancel_target", role: .destructive) { cancelTarget(); showTarget = false }
             }
             .navigationTitle("home.temp_target")
+            .onAppear {
+                if units == .mmol, let v = Double(targetMgdl) {
+                    targetMgdl = String(format: "%.1f", v / glucoseMmolFactor)
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("cancel") { showTarget = false } }
                 ToolbarItem(placement: .confirmationAction) {
@@ -668,7 +673,7 @@ struct HomeView: View {
 
     private func ttPresetButton(_ label: String, _ reason: TtReason, targetMgdl presetMgdl: Int, duration: Int) -> some View {
         Button(label) {
-            let v = units == .mmol ? String(format: "%.1f", Double(presetMgdl) / 18.0182) : "\(presetMgdl)"
+            let v = units == .mmol ? String(format: "%.1f", Double(presetMgdl) / glucoseMmolFactor) : "\(presetMgdl)"
             targetMgdl = v
             targetDuration = "\(duration)"
             targetReason = reason
@@ -694,7 +699,7 @@ struct HomeView: View {
     private func sendTarget() {
         let raw = targetMgdl.replacingOccurrences(of: ",", with: ".")
         guard let entered = Double(raw), let dur = Int(targetDuration), entered > 0, dur > 0 else { return }
-        let mgdl = units == .mmol ? Int((entered * 18.0182).rounded()) : Int(entered)
+        let mgdl = units == .mmol ? Int((entered * glucoseMmolFactor).rounded()) : Int(entered)
         Task {
             do {
                 try await writer.sendTempTarget(targetMgdl: mgdl, durationMin: dur, reason: targetReason)

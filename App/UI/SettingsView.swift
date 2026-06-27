@@ -20,15 +20,17 @@ struct SettingsView: View {
     }()
 
     private let keychain = SharedConstants.credentialKeychain()
+    private var thresholdUnit: String { store.displayUnits == .mmol ? "mmol/l" : "mg/dl" }
 
     init(store: AppStore, writer: NsTreatmentWriter) {
         self.store = store
         self.writer = writer
         let t = store.thresholds
-        _urgentLow = State(initialValue: String(t.urgentLow))
-        _low = State(initialValue: String(t.low))
-        _high = State(initialValue: String(t.high))
-        _urgentHigh = State(initialValue: String(t.urgentHigh))
+        let isMmol = store.displayUnits == .mmol
+        _urgentLow = State(initialValue: isMmol ? String(format: "%.1f", Double(t.urgentLow) / glucoseMmolFactor) : String(t.urgentLow))
+        _low = State(initialValue: isMmol ? String(format: "%.1f", Double(t.low) / glucoseMmolFactor) : String(t.low))
+        _high = State(initialValue: isMmol ? String(format: "%.1f", Double(t.high) / glucoseMmolFactor) : String(t.high))
+        _urgentHigh = State(initialValue: isMmol ? String(format: "%.1f", Double(t.urgentHigh) / glucoseMmolFactor) : String(t.urgentHigh))
         _staleMinutes = State(initialValue: String(t.staleMinutes))
     }
 
@@ -64,11 +66,26 @@ struct SettingsView: View {
             }
 
             Section("settings.alarm_thresholds") {
-                TextField("settings.urgent_low", text: $urgentLow).keyboardType(.numberPad)
-                TextField("settings.low", text: $low).keyboardType(.numberPad)
-                TextField("settings.high", text: $high).keyboardType(.numberPad)
-                TextField("settings.urgent_high", text: $urgentHigh).keyboardType(.numberPad)
-                TextField("settings.stale_min", text: $staleMinutes).keyboardType(.numberPad)
+                HStack {
+                    TextField("settings.urgent_low", text: $urgentLow).keyboardType(.decimalPad)
+                    Text(thresholdUnit).foregroundColor(.secondary)
+                }
+                HStack {
+                    TextField("settings.low", text: $low).keyboardType(.decimalPad)
+                    Text(thresholdUnit).foregroundColor(.secondary)
+                }
+                HStack {
+                    TextField("settings.high", text: $high).keyboardType(.decimalPad)
+                    Text(thresholdUnit).foregroundColor(.secondary)
+                }
+                HStack {
+                    TextField("settings.urgent_high", text: $urgentHigh).keyboardType(.decimalPad)
+                    Text(thresholdUnit).foregroundColor(.secondary)
+                }
+                HStack {
+                    TextField("settings.stale_min", text: $staleMinutes).keyboardType(.numberPad)
+                    Text("min").foregroundColor(.secondary)
+                }
             }
 
             NavigationLink {
@@ -97,18 +114,28 @@ struct SettingsView: View {
     }
 
     private func saveThresholds() {
+        let isMmol = store.displayUnits == .mmol
+        let toMgdl: (String, Int) -> Int = { str, fallback in
+            guard let v = Double(str) else { return fallback }
+            return isMmol ? Int((v * glucoseMmolFactor).rounded()) : Int(v)
+        }
         let d = UserDefaults.standard
-        d.set(Int(urgentLow) ?? 55, forKey: "threshold.urgentLow")
-        d.set(Int(low) ?? 70, forKey: "threshold.low")
-        d.set(Int(high) ?? 180, forKey: "threshold.high")
-        d.set(Int(urgentHigh) ?? 250, forKey: "threshold.urgentHigh")
-        d.set(Int(staleMinutes) ?? 15, forKey: "threshold.staleMinutes")
+        let ulVal = toMgdl(urgentLow, 55)
+        let loVal = toMgdl(low, 70)
+        let hiVal = toMgdl(high, 180)
+        let uhiVal = toMgdl(urgentHigh, 250)
+        let staleVal = Int(staleMinutes) ?? 15
+        d.set(ulVal, forKey: "threshold.urgentLow")
+        d.set(loVal, forKey: "threshold.low")
+        d.set(hiVal, forKey: "threshold.high")
+        d.set(uhiVal, forKey: "threshold.urgentHigh")
+        d.set(staleVal, forKey: "threshold.staleMinutes")
         store.updateThresholds(AlarmThresholds(
-            urgentLow: Int(urgentLow) ?? 55,
-            low: Int(low) ?? 70,
-            high: Int(high) ?? 180,
-            urgentHigh: Int(urgentHigh) ?? 250,
-            staleMinutes: Int(staleMinutes) ?? 15
+            urgentLow: ulVal,
+            low: loVal,
+            high: hiVal,
+            urgentHigh: uhiVal,
+            staleMinutes: staleVal
         ))
     }
 

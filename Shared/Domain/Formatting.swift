@@ -12,7 +12,7 @@ enum Formatting {
     static func format(_ mgdl: Int, units: GlucoseUnits) -> String {
         switch units {
         case .mgdl: return "\(mgdl)"
-        case .mmol: return String(format: "%.1f", Double(mgdl) / 18.0182)
+        case .mmol: return String(format: "%.1f", Double(mgdl) / glucoseMmolFactor)
         }
     }
 

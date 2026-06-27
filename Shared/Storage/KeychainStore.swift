@@ -55,6 +55,14 @@ final class KeychainStore {
         }
         var query = baseQuery(for: key)
         query[kSecValueData as String] = data
+        // AfterFirstUnlock: readable in the background and while the screen is
+        // locked (after the first unlock following boot). The default —
+        // WhenUnlocked — makes credentials unreadable whenever the device is
+        // locked, which is exactly when the audio keep-alive's background refresh
+        // needs them: get() then throws errSecInteractionNotAllowed, the caller's
+        // `try?` swallows it to nil, the client stays unconfigured, and the widget
+        // / Live Activity freeze until the user manually refreshes while unlocked.
+        query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
         let status = SecItemAdd(query as CFDictionary, nil)
         if status != errSecSuccess { throw KeychainError.unhandledStatus(status) }
     }
@@ -64,7 +72,14 @@ final class KeychainStore {
             throw KeychainError.encodingFailed
         }
         let query = baseQuery(for: key)
-        let attrs: [String: Any] = [kSecValueData as String: data]
+        // Also set accessibility on update so credentials saved by a previous build
+        // (with the default WhenUnlocked class) are upgraded in place. The launch-time
+        // migrate(to:) re-set()s the shared copy on every unlocked launch, so existing
+        // installs self-heal to AfterFirstUnlock without the user re-entering anything.
+        let attrs: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
+        ]
         let status = SecItemUpdate(query as CFDictionary, attrs as CFDictionary)
         if status != errSecSuccess { throw KeychainError.unhandledStatus(status) }
     }

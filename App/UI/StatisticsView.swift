@@ -19,8 +19,8 @@ struct StatisticsView: View {
         StatisticsCompute.hourlyPercentiles(readings: loaded, units: units)
     }
 
-    private func yVal(_ mgdl: Double) -> Double { units == .mmol ? mgdl / 18.0182 : mgdl }
-    private var yDomain: ClosedRange<Double> { units == .mmol ? (40/18.0182)...(300/18.0182) : 40...300 }
+    private func yVal(_ mgdl: Double) -> Double { units == .mmol ? mgdl / glucoseMmolFactor : mgdl }
+    private var yDomain: ClosedRange<Double> { units == .mmol ? (40/glucoseMmolFactor)...(300/glucoseMmolFactor) : 40...300 }
 
     var body: some View {
         List {

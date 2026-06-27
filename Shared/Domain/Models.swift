@@ -163,7 +163,11 @@ enum NsError: LocalizedError {
     }
 }
 
+/// Conversion factor between mg/dl and mmol/l for glucose.
+/// mmol/l = mg/dl / glucoseMmolFactor
+let glucoseMmolFactor = 18.0182
+
 func convertUnit(value: Double, from: GlucoseUnits, to: GlucoseUnits) -> Double {
     if from == to { return value }
-    return from == .mgdl ? value / 18.0182 : value * 18.0182
+    return from == .mgdl ? value / glucoseMmolFactor : value * glucoseMmolFactor
 }
