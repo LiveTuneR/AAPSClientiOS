@@ -45,6 +45,11 @@ enum RefreshError: LocalizedError {
     private let sharedStore: SharedStore
     private var lastPushedReadingDate: Date?
 
+    var ttPresets: [TtReason: TtPreset] {
+        get { Self.loadTtPresets() }
+        set { Self.saveTtPresets(newValue) }
+    }
+
     var isStale: Bool { Date().timeIntervalSince(lastRefresh) > 60 }
 
     func refreshIfStale() async {
@@ -119,6 +124,32 @@ enum RefreshError: LocalizedError {
             urgentHigh: d.integer(forKey: "threshold.urgentHigh"),
             staleMinutes: d.integer(forKey: "threshold.staleMinutes")
         )
+    }
+
+    private static func loadTtPresets() -> [TtReason: TtPreset] {
+        let d = UserDefaults.standard
+        var presets: [TtReason: TtPreset] = [:]
+        for reason in [TtReason.eatingSoon, .activity, .hypo] {
+            let key = "ttPreset.\(reason.rawValue)"
+            if let data = d.data(forKey: key),
+               let preset = try? JSONDecoder().decode(TtPreset.self, from: data) {
+                presets[reason] = preset
+            } else {
+                presets[reason] = TtPreset(targetMgdl: reason.defaultTargetMgdl,
+                                           durationMin: reason.defaultDurationMin)
+            }
+        }
+        return presets
+    }
+
+    private static func saveTtPresets(_ presets: [TtReason: TtPreset]) {
+        let d = UserDefaults.standard
+        for (reason, preset) in presets {
+            let key = "ttPreset.\(reason.rawValue)"
+            if let data = try? JSONEncoder().encode(preset) {
+                d.set(data, forKey: key)
+            }
+        }
     }
 
     func refresh() async throws {

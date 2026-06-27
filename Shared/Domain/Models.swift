@@ -126,6 +126,29 @@ enum TtReason: String {
     case activity = "Activity"
     case hypo = "Hypo"
     case custom = "Custom"
+
+    var defaultTargetMgdl: Int {
+        switch self {
+        case .eatingSoon: return 90
+        case .activity:   return 140
+        case .hypo:       return 150
+        case .custom:     return 110
+        }
+    }
+
+    var defaultDurationMin: Int {
+        switch self {
+        case .eatingSoon: return 45
+        case .activity:   return 90
+        case .hypo:       return 60
+        case .custom:     return 60
+        }
+    }
+}
+
+struct TtPreset: Equatable, Codable {
+    var targetMgdl: Int
+    var durationMin: Int
 }
 
 struct LoopReason: Equatable {

@@ -18,6 +18,12 @@ struct SettingsView: View {
         if #available(iOS 16.1, *) { return LiveActivityController.shared.isRunning }
         return false
     }()
+    @State private var eatingSoonTarget: String = ""
+    @State private var eatingSoonDuration: String = ""
+    @State private var activityTarget: String = ""
+    @State private var activityDuration: String = ""
+    @State private var hypoTarget: String = ""
+    @State private var hypoDuration: String = ""
 
     private let keychain = SharedConstants.credentialKeychain()
     private var thresholdUnit: String { store.displayUnits == .mmol ? "mmol/l" : "mg/dl" }
@@ -32,6 +38,16 @@ struct SettingsView: View {
         _high = State(initialValue: isMmol ? String(format: "%.1f", Double(t.high) / glucoseMmolFactor) : String(t.high))
         _urgentHigh = State(initialValue: isMmol ? String(format: "%.1f", Double(t.urgentHigh) / glucoseMmolFactor) : String(t.urgentHigh))
         _staleMinutes = State(initialValue: String(t.staleMinutes))
+        let presets = store.ttPresets
+        func fmt(_ mgdl: Int) -> String {
+            isMmol ? String(format: "%.1f", Double(mgdl) / glucoseMmolFactor) : String(mgdl)
+        }
+        _eatingSoonTarget = State(initialValue: fmt(presets[.eatingSoon]?.targetMgdl ?? TtReason.eatingSoon.defaultTargetMgdl))
+        _eatingSoonDuration = State(initialValue: String(presets[.eatingSoon]?.durationMin ?? TtReason.eatingSoon.defaultDurationMin))
+        _activityTarget = State(initialValue: fmt(presets[.activity]?.targetMgdl ?? TtReason.activity.defaultTargetMgdl))
+        _activityDuration = State(initialValue: String(presets[.activity]?.durationMin ?? TtReason.activity.defaultDurationMin))
+        _hypoTarget = State(initialValue: fmt(presets[.hypo]?.targetMgdl ?? TtReason.hypo.defaultTargetMgdl))
+        _hypoDuration = State(initialValue: String(presets[.hypo]?.durationMin ?? TtReason.hypo.defaultDurationMin))
     }
 
     var body: some View {
@@ -88,6 +104,12 @@ struct SettingsView: View {
                 }
             }
 
+            Section("Temp Target Presets") {
+                ttPresetRow(reason: .eatingSoon, label: "Eating Soon")
+                ttPresetRow(reason: .activity, label: "Activity")
+                ttPresetRow(reason: .hypo, label: "Hypo")
+            }
+
             NavigationLink {
                 ProfileView(store: store, writer: writer)
             } label: {
@@ -105,7 +127,35 @@ struct SettingsView: View {
         }
         .navigationTitle("settings.title")
         .onAppear { loadSettings() }
-        .onDisappear { saveThresholds() }
+        .onDisappear { saveThresholds(); saveTtPresets() }
+    }
+
+    private func ttPresetRow(reason: TtReason, label: String) -> some View {
+        let isMmol = store.displayUnits == .mmol
+        return Group {
+            switch reason {
+            case .eatingSoon:
+                ttPresetFields(label: label, target: $eatingSoonTarget, duration: $eatingSoonDuration, isMmol: isMmol)
+            case .activity:
+                ttPresetFields(label: label, target: $activityTarget, duration: $activityDuration, isMmol: isMmol)
+            case .hypo:
+                ttPresetFields(label: label, target: $hypoTarget, duration: $hypoDuration, isMmol: isMmol)
+            case .custom:
+                EmptyView()
+            }
+        }
+    }
+
+    private func ttPresetFields(label: String, target: Binding<String>, duration: Binding<String>, isMmol: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label).font(.subheadline).bold()
+            HStack {
+                TextField("Target", text: target).keyboardType(.decimalPad)
+                Text(isMmol ? "mmol/l" : "mg/dl").foregroundColor(.secondary)
+                TextField("Duration", text: duration).keyboardType(.numberPad)
+                Text("min").foregroundColor(.secondary)
+            }
+        }
     }
 
     private func loadSettings() {
@@ -137,6 +187,22 @@ struct SettingsView: View {
             urgentHigh: uhiVal,
             staleMinutes: staleVal
         ))
+    }
+
+    private func saveTtPresets() {
+        let isMmol = store.displayUnits == .mmol
+        let toMgdl: (String, Int) -> Int = { str, fallback in
+            guard let v = Double(str) else { return fallback }
+            return isMmol ? Int((v * glucoseMmolFactor).rounded()) : Int(v)
+        }
+        var presets: [TtReason: TtPreset] = [:]
+        presets[.eatingSoon] = TtPreset(targetMgdl: toMgdl(eatingSoonTarget, 90),
+                                         durationMin: Int(eatingSoonDuration) ?? 45)
+        presets[.activity] = TtPreset(targetMgdl: toMgdl(activityTarget, 140),
+                                       durationMin: Int(activityDuration) ?? 90)
+        presets[.hypo] = TtPreset(targetMgdl: toMgdl(hypoTarget, 150),
+                                   durationMin: Int(hypoDuration) ?? 60)
+        store.ttPresets = presets
     }
 
     private func testConnection() {

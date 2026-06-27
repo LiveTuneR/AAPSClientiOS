@@ -28,6 +28,11 @@ struct HistoryView: View {
                     if let carbs = treatment.carbs {
                         Text("\(String(format: "%.0f", carbs)) g")
                     }
+                    if let absolute = treatment.absolute {
+                        Text("\(String(format: "%.2f", absolute)) U/h")
+                    } else if let pct = treatment.tempBasalPercent {
+                        Text("\(pct)% basal")
+                    }
                     if let lo = treatment.targetBottom {
                         Text(targetText(lo: lo, hi: treatment.targetTop ?? lo))
                     }

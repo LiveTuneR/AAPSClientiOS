@@ -155,12 +155,39 @@ struct HomeView: View {
             basalEventualRow
             statusRow
             changeAgesRow
+            if let tt = activeTempTarget {
+                tempTargetRow(tt)
+            }
             reasonChips
             profileChip
         }
         .padding(14)
         .background(Color(.systemGray6))
         .cornerRadius(14)
+    }
+
+    private var activeTempTarget: Treatment? {
+        let now = Date()
+        return store.treatments.first { t in
+            t.eventType == "Temporary Target"
+            && (t.targetBottom != nil || t.targetTop != nil)
+            && t.durationMin ?? 0 > 0
+            && t.date.addingTimeInterval(Double(t.durationMin ?? 0) * 60) > now
+        }
+    }
+
+    private func tempTargetRow(_ t: Treatment) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: "target").font(.caption2).foregroundColor(.secondary)
+            let lo = t.targetBottom ?? 0
+            let hi = t.targetTop ?? lo
+            Text("Target \(targetText(lo: lo, hi: hi))").font(.caption2)
+            Spacer()
+            if let dur = t.durationMin {
+                let remaining = max(0, Int(t.date.addingTimeInterval(Double(dur) * 60).timeIntervalSinceNow) / 60)
+                Text("\(remaining)m left").font(.caption2).foregroundColor(.secondary)
+            }
+        }
     }
 
     private var mainGlucoseRow: some View {
@@ -638,9 +665,10 @@ struct HomeView: View {
             Form {
                 Section("Presets") {
                     HStack(spacing: 8) {
-                        ttPresetButton("Eating Soon", .eatingSoon, targetMgdl: 90, duration: 45)
-                        ttPresetButton("Activity", .activity, targetMgdl: 140, duration: 90)
-                        ttPresetButton("Hypo", .hypo, targetMgdl: 150, duration: 60)
+                        let presets = store.ttPresets
+                        ttPresetButton("Eating Soon", .eatingSoon, preset: presets[.eatingSoon])
+                        ttPresetButton("Activity", .activity, preset: presets[.activity])
+                        ttPresetButton("Hypo", .hypo, preset: presets[.hypo])
                     }
                 }
                 HStack {
@@ -653,6 +681,13 @@ struct HomeView: View {
                     Text("Activity").tag(TtReason.activity)
                     Text("Hypo").tag(TtReason.hypo)
                     Text("Custom").tag(TtReason.custom)
+                }
+                .onChange(of: targetReason) { reason in
+                    let presets = store.ttPresets
+                    if let preset = presets[reason] {
+                        targetMgdl = formatTargetMgdl(preset.targetMgdl)
+                        targetDuration = "\(preset.durationMin)"
+                    }
                 }
                 Button("action.cancel_target", role: .destructive) { cancelTarget(); showTarget = false }
             }
@@ -671,16 +706,26 @@ struct HomeView: View {
         }
     }
 
-    private func ttPresetButton(_ label: String, _ reason: TtReason, targetMgdl presetMgdl: Int, duration: Int) -> some View {
+    private func ttPresetButton(_ label: String, _ reason: TtReason, preset: TtPreset?) -> some View {
         Button(label) {
-            let v = units == .mmol ? String(format: "%.1f", Double(presetMgdl) / glucoseMmolFactor) : "\(presetMgdl)"
-            targetMgdl = v
-            targetDuration = "\(duration)"
+            let mgdl = preset?.targetMgdl ?? reason.defaultTargetMgdl
+            let dur = preset?.durationMin ?? reason.defaultDurationMin
+            targetMgdl = formatTargetMgdl(mgdl)
+            targetDuration = "\(dur)"
             targetReason = reason
         }
         .buttonStyle(.bordered)
         .font(.caption)
         .controlSize(.small)
+    }
+
+    private func formatTargetMgdl(_ mgdl: Int) -> String {
+        units == .mmol ? String(format: "%.1f", Double(mgdl) / glucoseMmolFactor) : "\(mgdl)"
+    }
+
+    private func targetText(lo: Int, hi: Int) -> String {
+        let suffix = units == .mmol ? "mmol/l" : "mg/dl"
+        return lo == hi ? "\(formatTargetMgdl(lo)) \(suffix)" : "\(formatTargetMgdl(lo))–\(formatTargetMgdl(hi)) \(suffix)"
     }
 
     // MARK: - Actions logic
