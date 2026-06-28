@@ -23,7 +23,7 @@ struct HistoryView: View {
                 Spacer()
                 VStack(alignment: .trailing) {
                     if let insulin = treatment.insulin {
-                        Text("\(String(format: "%.1f", insulin)) U")
+                        Text("\(String(format: "%.3f", insulin)) U")
                     }
                     if let carbs = treatment.carbs {
                         Text("\(String(format: "%.0f", carbs)) g")

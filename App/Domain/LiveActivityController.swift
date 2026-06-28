@@ -25,8 +25,11 @@ import os
     /// re-attempt on demand before each update until the binding succeeds.
     @discardableResult
     private func reattach() -> Bool {
-        if activity == nil {
-            activity = Activity<GlucoseActivityAttributes>.activities.first
+        // Always look up the live activity — the stored reference can go stale
+        // if ActivityKit dismissed it (system timeout, budget exhaustion, etc.).
+        if let existing = Activity<GlucoseActivityAttributes>.activities.first {
+            activity = existing
+            return true
         }
         return activity != nil
     }
