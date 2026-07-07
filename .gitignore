@@ -29,3 +29,6 @@ CLAUDE.md
 
 # repomix output is a regenerable derived artifact, not source
 repomix-output.json
+
+# Local git worktrees used for isolated agent work
+.worktrees/
