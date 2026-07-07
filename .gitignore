@@ -26,3 +26,6 @@ docs/
 
 # Internal Claude Code instructions, not for public repo
 CLAUDE.md
+
+# repomix output is a regenerable derived artifact, not source
+repomix-output.json
