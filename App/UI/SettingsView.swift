@@ -150,6 +150,12 @@ struct SettingsView: View {
                 Text("Profile")
             }
 
+            NavigationLink {
+                MasterConfigView(store: store)
+            } label: {
+                Text(String(localized: "remote.master_title"))
+            }
+
             if #available(iOS 16.1, *) {
                 Section {
                     Toggle(String(localized: "settings.live_activity"), isOn: $liveActivityOn)
