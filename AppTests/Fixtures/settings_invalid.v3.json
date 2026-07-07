@@ -1,0 +1,13 @@
+{
+  "status": 200,
+  "result": {
+    "_id": "aaps",
+    "identifier": "aaps",
+    "date": 946684800001,
+    "utcOffset": 0,
+    "app": "AAPS",
+    "schemaVersion": 1,
+    "srvModified": 1751328000000,
+    "runningConfig": "broken"
+  }
+}

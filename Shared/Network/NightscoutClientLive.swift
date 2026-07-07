@@ -39,12 +39,26 @@ actor NightscoutClientLive: NightscoutClient {
     }
 
     func fetchTreatments(since: Date? = nil) async throws -> [Treatment] {
-        var path = "api/v3/treatments?sort$desc=date&limit=100"
-        if let since {
-            path += "&srvModified$gte=\(Int64(since.timeIntervalSince1970 * 1000))"
+        let pageSize = 100
+        var all: [Treatment] = []
+        var seen = Set<String>()
+        var skip = 0
+
+        for _ in 0..<20 {
+            var path = "api/v3/treatments?sort$desc=date&limit=\(pageSize)&skip=\(skip)"
+            if let since {
+                path += "&srvModified$gte=\(Int64(since.timeIntervalSince1970 * 1000))"
+            }
+            let data = try await get(path)
+            let page = try NsMapping.treatments(from: data)
+            if page.isEmpty { break }
+            for treatment in page where seen.insert(treatment.id).inserted {
+                all.append(treatment)
+            }
+            if page.count < pageSize { break }
+            skip += page.count
         }
-        let data = try await get(path)
-        return try NsMapping.treatments(from: data)
+        return all
     }
 
     func fetchDeviceStatus() async throws -> LoopStatus? {
@@ -63,6 +77,22 @@ actor NightscoutClientLive: NightscoutClient {
         let path = "api/v3/profile?sort$desc=date&limit=1"
         let data = try await get(path)
         return try NsMapping.profileStore(from: data)
+    }
+
+    func fetchSettings(identifier: String) async throws -> NsSettingsDocument? {
+        let path = "api/v3/settings/\(identifier)"
+        let data = try await get(path)
+        return try NsMapping.settingsDocument(from: data, identifier: identifier)
+    }
+
+    func fetchRunningConfigCold() async throws -> NsRunningConfigCold? {
+        guard let document = try await fetchSettings(identifier: NightscoutSettingsIdentifier.cold) else { return nil }
+        return try NsMapping.runningConfigCold(from: document)
+    }
+
+    func fetchRunningConfigHot() async throws -> NsRunningConfigHot? {
+        guard let document = try await fetchSettings(identifier: NightscoutSettingsIdentifier.state) else { return nil }
+        return try NsMapping.runningConfigHot(from: document)
     }
 
     /// Paginated entries covering `days` back.

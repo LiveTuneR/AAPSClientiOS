@@ -162,4 +162,92 @@ final class NsMappingTests: XCTestCase {
         let cancel = treatments[2]
         XCTAssertEqual(cancel.durationMin, 0)
     }
+
+    func test_mapsRunningConfigCold() throws {
+        let data = try loadFixture("settings_aaps")
+        let document = try XCTUnwrap(NsMapping.settingsDocument(from: data, identifier: NightscoutSettingsIdentifier.cold))
+        let cold = try NsMapping.runningConfigCold(from: document)
+
+        XCTAssertEqual(document.identifier, "aaps")
+        XCTAssertEqual(document.app, "AAPS")
+        XCTAssertEqual(document.schemaVersion, 1)
+        XCTAssertEqual(cold.pump, "Dana-i")
+        XCTAssertEqual(cold.version, "4.3.0")
+        XCTAssertEqual(cold.isFakingTempsByExtendedBoluses, false)
+        XCTAssertEqual(cold.authorizedClientIds, ["abc", "def"])
+        XCTAssertEqual(cold.syncedPrefs["NsClientAcceptProfileSwitch"], "true")
+        XCTAssertEqual(cold.syncedPrefsSnapshot.activePluginAps, "OpenAPSAMA")
+        XCTAssertTrue(cold.remoteCapabilities.canRemoteProfileSwitch)
+        XCTAssertTrue(cold.remoteCapabilities.canRemoteTempTarget)
+        XCTAssertTrue(cold.remoteCapabilities.canRemoteCarbs)
+        XCTAssertFalse(cold.remoteCapabilities.canRemoteRunningMode)
+        XCTAssertTrue(cold.remoteCapabilities.usesWebSockets)
+    }
+
+    func test_mapsRunningConfigHot() throws {
+        let data = try loadFixture("settings_aaps_state")
+        let document = try XCTUnwrap(NsMapping.settingsDocument(from: data, identifier: NightscoutSettingsIdentifier.state))
+        let hot = try NsMapping.runningConfigHot(from: document)
+
+        XCTAssertEqual(hot.usedAutosensOnMainPhone, true)
+        XCTAssertEqual(hot.activeScene?.sceneId, "school-sport")
+        XCTAssertEqual(hot.activeScene?.durationMs, 5_400_000)
+        XCTAssertEqual(hot.activeScene?.lifecycle, "ACTIVE")
+        XCTAssertEqual(hot.activeScene?.ttNsId, "667")
+        XCTAssertEqual(hot.activeScene?.rmNsId, "669")
+    }
+
+    func test_settingsDocumentReturnsNilWhenMissing() throws {
+        let json = #"{"status":200,"result":null}"#
+        let document = try NsMapping.settingsDocument(from: Data(json.utf8), identifier: NightscoutSettingsIdentifier.cold)
+        XCTAssertNil(document)
+    }
+
+    func test_settingsDocumentThrowsOnInvalidRunningConfig() throws {
+        let data = try loadFixture("settings_invalid")
+        XCTAssertThrowsError(try NsMapping.settingsDocument(from: data, identifier: NightscoutSettingsIdentifier.cold))
+    }
+
+    func test_parsesSyncedPrefsPayloads() {
+        let presets = NsSyncedPrefsParser.tempTargetPresets(from: "[{\"name\":\"Eating Soon\",\"targetMgdl\":90,\"durationMin\":45}]")
+        XCTAssertEqual(presets, [NsSyncedTempTargetPreset(name: "Eating Soon", targetMgdl: 90, durationMin: 45)])
+
+        let scenes = NsSyncedPrefsParser.sceneDefinitions(from: "[{\"sceneId\":\"school-sport\",\"name\":\"School Sport\"}]")
+        XCTAssertEqual(scenes, [NsSceneDefinition(sceneId: "school-sport", name: "School Sport")])
+
+        let qw = NsSyncedPrefsParser.quickWizardEntries(from: "[{\"name\":\"Breakfast\",\"carbs\":30}]")
+        XCTAssertEqual(qw, [NsQuickWizardEntry(name: "Breakfast", carbs: 30, percentage: nil, note: nil)])
+    }
+
+    func test_remoteCapabilitiesSupportPreferenceKeyAliases() {
+        let capabilities = NsRemoteCapabilities(syncedPrefs: [
+            "ns_receive_profile_switch": "true",
+            "ns_receive_temp_target": "true",
+            "ns_receive_carbs": "true",
+            "ns_receive_therapy_events": "false",
+            "ns_receive_running_mode": "false",
+            "ns_use_ws": "true",
+        ])
+
+        XCTAssertTrue(capabilities.canRemoteProfileSwitch)
+        XCTAssertTrue(capabilities.canRemoteTempTarget)
+        XCTAssertTrue(capabilities.canRemoteCarbs)
+        XCTAssertFalse(capabilities.canRemoteTherapyEvents)
+        XCTAssertFalse(capabilities.canRemoteRunningMode)
+        XCTAssertTrue(capabilities.usesWebSockets)
+    }
+
+    func test_remoteCapabilitiesSupportNumericBooleanValues() {
+        let capabilities = NsRemoteCapabilities(syncedPrefs: [
+            "NsClientAcceptTempTarget": "1",
+            "NsClientAcceptCarbs": "1",
+            "NsClientAcceptTherapyEvent": "0",
+            "NsClientAcceptRunningMode": "0",
+        ])
+
+        XCTAssertTrue(capabilities.canRemoteTempTarget)
+        XCTAssertTrue(capabilities.canRemoteCarbs)
+        XCTAssertFalse(capabilities.canRemoteTherapyEvents)
+        XCTAssertFalse(capabilities.canRemoteRunningMode)
+    }
 }

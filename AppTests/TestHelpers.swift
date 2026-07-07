@@ -23,6 +23,10 @@ final class FixtureNightscoutClient: NightscoutClient {
     /// Simulate a Task cancelled mid-refresh: entries succeed, later stages throw
     /// CancellationError (the real-world trigger for the frozen widget/LA bug).
     var cancelAfterEntries = false
+    var settingsByIdentifier: [String: String] = [
+        NightscoutSettingsIdentifier.cold: "settings_aaps",
+        NightscoutSettingsIdentifier.state: "settings_aaps_state",
+    ]
 
     func authorize() async throws {
         if let error = shouldThrow { throw error }
@@ -58,6 +62,13 @@ final class FixtureNightscoutClient: NightscoutClient {
         if let error = shouldThrow { throw error }
         let data = try loadFixture("profile")
         return try NsMapping.profileStore(from: data)
+    }
+
+    func fetchSettings(identifier: String) async throws -> NsSettingsDocument? {
+        if let error = shouldThrow { throw error }
+        guard let fixture = settingsByIdentifier[identifier] else { return nil }
+        let data = try loadFixture(fixture)
+        return try NsMapping.settingsDocument(from: data, identifier: identifier)
     }
 
     func fetchEntries(sinceDays days: Int) async throws -> [GlucoseReading] {

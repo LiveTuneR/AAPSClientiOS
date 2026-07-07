@@ -14,10 +14,8 @@ struct SettingsView: View {
     @State private var staleMinutes: String
     @State private var testingConnection = false
     @State private var connectionResult: String?
-    @State private var liveActivityOn = {
-        if #available(iOS 16.1, *) { return LiveActivityController.shared.isRunning }
-        return false
-    }()
+    @State private var liveActivityOn: Bool
+    @State private var glucoseNotificationOn: Bool
     @State private var eatingSoonTarget: String = ""
     @State private var eatingSoonDuration: String = ""
     @State private var activityTarget: String = ""
@@ -38,6 +36,8 @@ struct SettingsView: View {
         _high = State(initialValue: isMmol ? String(format: "%.1f", Double(t.high) / glucoseMmolFactor) : String(t.high))
         _urgentHigh = State(initialValue: isMmol ? String(format: "%.1f", Double(t.urgentHigh) / glucoseMmolFactor) : String(t.urgentHigh))
         _staleMinutes = State(initialValue: String(t.staleMinutes))
+        _liveActivityOn = State(initialValue: store.isLiveActivityEnabled)
+        _glucoseNotificationOn = State(initialValue: store.isGlucoseNotificationEnabled)
         let presets = store.ttPresets
         func fmt(_ mgdl: Int) -> String {
             isMmol ? String(format: "%.1f", Double(mgdl) / glucoseMmolFactor) : String(mgdl)
@@ -73,7 +73,7 @@ struct SettingsView: View {
             Section("settings.glucose_units") {
                 Picker("settings.units", selection: Binding(
                     get: { store.displayUnits },
-                    set: { store.setDisplayUnits($0) }
+                    set: { changeDisplayUnits(to: $0) }
                 )) {
                     Text("mg/dl").tag(GlucoseUnits.mgdl)
                     Text("mmol/l").tag(GlucoseUnits.mmol)
@@ -104,10 +104,44 @@ struct SettingsView: View {
                 }
             }
 
+            if !store.remoteTempTargetPresets.isEmpty {
+                Section {
+                    ForEach(store.remoteTempTargetPresets) { preset in
+                        HStack {
+                            Text(preset.name)
+                            Spacer()
+                            Text("\(displayGlucose(preset.targetMgdl)) • \(preset.durationMin)m")
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                } header: {
+                    Text(String(localized: "remote.master_presets"))
+                } footer: {
+                    Text(String(localized: "remote.master_presets_footer"))
+                }
+            }
+
             Section("Temp Target Presets") {
                 ttPresetRow(reason: .eatingSoon, label: "Eating Soon")
                 ttPresetRow(reason: .activity, label: "Activity")
                 ttPresetRow(reason: .hypo, label: "Hypo")
+            }
+
+            if !store.remoteSceneDefinitions.isEmpty {
+                Section {
+                    ForEach(store.remoteSceneDefinitions) { scene in
+                        HStack {
+                            Text(scene.name ?? scene.sceneId)
+                            Spacer()
+                            if let name = scene.name, name != scene.sceneId {
+                                Text(scene.sceneId)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                } header: {
+                    Text(String(localized: "remote.scene_definitions"))
+                }
             }
 
             NavigationLink {
@@ -124,10 +158,25 @@ struct SettingsView: View {
                     Text(String(localized: "settings.live_activity_caption"))
                 }
             }
+
+            Section {
+                Toggle(String(localized: "settings.glucose_notification"), isOn: $glucoseNotificationOn)
+                    .onChange(of: glucoseNotificationOn) { on in
+                        store.setGlucoseNotificationEnabled(on)
+                    }
+            } footer: {
+                Text(String(localized: "settings.glucose_notification_caption"))
+            }
         }
         .navigationTitle("settings.title")
         .onAppear { loadSettings() }
         .onDisappear { saveThresholds(); saveTtPresets() }
+    }
+
+    private func displayGlucose(_ mgdl: Int) -> String {
+        store.displayUnits == .mmol
+            ? String(format: "%.1f mmol/l", Double(mgdl) / glucoseMmolFactor)
+            : "\(mgdl) mg/dl"
     }
 
     private func ttPresetRow(reason: TtReason, label: String) -> some View {
@@ -161,6 +210,21 @@ struct SettingsView: View {
     private func loadSettings() {
         nsUrl = (try? keychain.get(.nsUrl)) ?? ""
         accessToken = (try? keychain.get(.nsAccessToken)) ?? ""
+        liveActivityOn = store.isLiveActivityEnabled
+        glucoseNotificationOn = store.isGlucoseNotificationEnabled
+    }
+
+    private func changeDisplayUnits(to units: GlucoseUnits) {
+        let previous = store.displayUnits
+        guard previous != units else { return }
+        urgentLow = SettingsValueConverter.convert(urgentLow, from: previous, to: units)
+        low = SettingsValueConverter.convert(low, from: previous, to: units)
+        high = SettingsValueConverter.convert(high, from: previous, to: units)
+        urgentHigh = SettingsValueConverter.convert(urgentHigh, from: previous, to: units)
+        eatingSoonTarget = SettingsValueConverter.convert(eatingSoonTarget, from: previous, to: units)
+        activityTarget = SettingsValueConverter.convert(activityTarget, from: previous, to: units)
+        hypoTarget = SettingsValueConverter.convert(hypoTarget, from: previous, to: units)
+        store.setDisplayUnits(units)
     }
 
     private func saveThresholds() {

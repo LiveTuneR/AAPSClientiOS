@@ -23,6 +23,10 @@ enum RefreshError: LocalizedError {
     @Published var displayUnits: GlucoseUnits = .mgdl
     @Published var careEvents: [Treatment] = []
     @Published var deviceStatusHistory: [DeviceStatusEntry] = []
+    @Published var remoteConfigCold: NsRunningConfigCold?
+    @Published var remoteConfigHot: NsRunningConfigHot?
+    @Published var remoteCapabilities: NsRemoteCapabilities?
+    @Published var remoteConfigError: String?
 
     var activeProfileSwitch: Treatment? {
         (careEvents + treatments)
@@ -43,11 +47,84 @@ enum RefreshError: LocalizedError {
     }
     private(set) var lastRefresh = Date.distantPast
     private let sharedStore: SharedStore
+    private let glucoseNotificationPublisher: GlucoseNotificationPublishing
     private var lastPushedReadingDate: Date?
+    private var lastNotifiedReadingDate: Date?
+    private var lastLiveActivityReadingDate: Date?
+    private var lastLiveActivityPushAt: Date?
+    static let liveActivityEnabledKey = "liveActivity.enabled"
+    static let liveActivityPushInterval: TimeInterval = 5 * 60
+    static let glucoseNotificationEnabledKey = "notification.latestGlucose.enabled"
+
+    var isGlucoseNotificationEnabled: Bool {
+        UserDefaults.standard.bool(forKey: Self.glucoseNotificationEnabledKey)
+    }
+
+    var isLiveActivityEnabled: Bool {
+        let isRunning: Bool
+        if #available(iOS 16.1, *) {
+            isRunning = LiveActivityController.shared.isRunning
+        } else {
+            isRunning = false
+        }
+        return Self.resolveLiveActivityPreference(
+            defaults: .standard,
+            activityIsRunning: isRunning
+        )
+    }
+
+    static func resolveLiveActivityPreference(
+        defaults: UserDefaults,
+        activityIsRunning: Bool
+    ) -> Bool {
+        if defaults.object(forKey: liveActivityEnabledKey) != nil {
+            return defaults.bool(forKey: liveActivityEnabledKey)
+        }
+        if activityIsRunning {
+            defaults.set(true, forKey: liveActivityEnabledKey)
+        }
+        return activityIsRunning
+    }
+
+    static func shouldPushLiveActivity(
+        readingChanged: Bool,
+        activityIsRunning: Bool,
+        lastPushAt: Date?,
+        now: Date
+    ) -> Bool {
+        guard activityIsRunning else { return true }
+        guard readingChanged else { return false }
+        guard let lastPushAt else { return true }
+        return now.timeIntervalSince(lastPushAt) >= liveActivityPushInterval
+    }
 
     var ttPresets: [TtReason: TtPreset] {
         get { Self.loadTtPresets() }
         set { Self.saveTtPresets(newValue) }
+    }
+
+    var remoteTempTargetPresets: [NsSyncedTempTargetPreset] {
+        NsSyncedPrefsParser.tempTargetPresets(from: remoteConfigCold?.syncedPrefsSnapshot.tempTargetPresetsJson)
+    }
+
+    var remoteSceneDefinitions: [NsSceneDefinition] {
+        NsSyncedPrefsParser.sceneDefinitions(from: remoteConfigCold?.syncedPrefsSnapshot.sceneDefinitionsJson)
+    }
+
+    var remoteQuickWizardEntries: [NsQuickWizardEntry] {
+        NsSyncedPrefsParser.quickWizardEntries(from: remoteConfigCold?.syncedPrefsSnapshot.quickWizardJson)
+    }
+
+    var activeRemoteSceneDefinition: NsSceneDefinition? {
+        guard let sceneId = remoteConfigHot?.activeScene?.sceneId else { return nil }
+        return remoteSceneDefinitions.first(where: { $0.sceneId == sceneId })
+    }
+
+    var activeRemoteSceneDisplayName: String? {
+        if let name = activeRemoteSceneDefinition?.name, !name.isEmpty {
+            return name
+        }
+        return remoteConfigHot?.activeScene?.sceneId
     }
 
     var isStale: Bool { Date().timeIntervalSince(lastRefresh) > 60 }
@@ -57,10 +134,21 @@ enum RefreshError: LocalizedError {
         try? await refresh()
     }
 
-    init(client: NightscoutClient, alarmEngine: AlarmEngine, sharedStore: SharedStore = SharedStore()) {
+    func fetchHistory(days: Int) async throws -> [GlucoseReading] {
+        ensureConfigured()
+        return try await client.fetchEntries(sinceDays: days)
+    }
+
+    init(
+        client: NightscoutClient,
+        alarmEngine: AlarmEngine,
+        sharedStore: SharedStore = SharedStore(),
+        glucoseNotificationPublisher: GlucoseNotificationPublishing = DummyGlucoseNotificationPublisher()
+    ) {
         self._client = client
         self.alarmEngine = alarmEngine
         self.sharedStore = sharedStore
+        self.glucoseNotificationPublisher = glucoseNotificationPublisher
         self.thresholds = Self.loadThresholds()
         self.displayUnits = Self.loadDisplayUnits()
         ensureConfigured()
@@ -195,6 +283,23 @@ enum RefreshError: LocalizedError {
             deviceStatusHistory = history
         }
 
+        remoteConfigError = nil
+        do {
+            let cold = try await client.fetchRunningConfigCold()
+            remoteConfigCold = cold
+            remoteCapabilities = cold?.remoteCapabilities
+        } catch is CancellationError { return }
+        catch {
+            rememberRemoteConfigError(error)
+        }
+
+        do {
+            remoteConfigHot = try await client.fetchRunningConfigHot()
+        } catch is CancellationError { return }
+        catch {
+            rememberRemoteConfigError(error)
+        }
+
         connectionLost = firstError != nil
         if entriesOk {
             lastRefresh = Date()
@@ -220,42 +325,85 @@ enum RefreshError: LocalizedError {
     /// Mirror the latest reading + display config into the App Group for the widget.
     ///
     /// The snapshot is always persisted so the widget's timeline provider reads the
-    /// freshest data whenever the system next asks for it. The *pushes* (widget
-    /// reload + Live Activity update), however, fire only when the reading actually
-    /// changed — or when `force` is set for a config change.
+    /// freshest data whenever the system next asks for it.
     ///
-    /// Why: ActivityKit throttles `Activity.update()` beyond a per-hour budget. The
-    /// foreground/background poll runs every 60 s, but a new CGM reading only lands
-    /// every ~5 min, so ~4 of every 5 polls carry an identical reading. Pushing each
-    /// of those burned the budget; once exhausted, ActivityKit silently dropped
-    /// subsequent updates and the Live Activity froze on an old reading while the
-    /// in-app screen stayed fresh. Pushing only on change drops us to ~12/hour (CGM
-    /// cadence) — under budget — and the LA's `.relative` age text ticks on its own
-    /// between pushes, so it still looks live.
+    /// Widget reload fires only when the reading actually changed (or `force`) to
+    /// stay under the timeline reload budget.
+    ///
+    /// Live Activity update fires on EVERY call. With `NSSupportsLiveActivitiesFrequentUpdates`
+    /// the budget is generous (~70/hour). Pushing every 60 s keeps staleDate fresh so
+    /// the countdown timer never drifts, and if ActivityKit drops an update the next
+    /// poll recovers within 60 s instead of accumulating drift.
     func updateSharedSnapshot(force: Bool = false) {
         sharedStore.saveConfig(DisplayConfig(units: displayUnits, thresholds: thresholds))
-        guard let latest = readings.first else { return }
-        let delta = readings.count >= 2 ? latest.mgdl - readings[1].mgdl : nil
-        let snap = GlucoseSnapshot(
-            mgdl: latest.mgdl, trend: latest.trend, delta: delta, date: latest.date,
-            iob: loopStatus?.iob, cob: loopStatus?.cob
-        )
-        sharedStore.saveSnapshot(snap)
+        var readingChanged = force
+        if let latest = readings.first {
+            let delta = readings.count >= 2 ? latest.mgdl - readings[1].mgdl : nil
+            let snap = GlucoseSnapshot(
+                mgdl: latest.mgdl, trend: latest.trend, delta: delta, date: latest.date,
+                iob: loopStatus?.iob, cob: loopStatus?.cob
+            )
+            sharedStore.saveSnapshot(snap)
 
-        guard force || latest.date != lastPushedReadingDate else { return }
-        lastPushedReadingDate = latest.date
-        WidgetCenter.shared.reloadAllTimelines()
+            readingChanged = force || latest.date != lastPushedReadingDate
+            if readingChanged {
+                lastPushedReadingDate = latest.date
+                WidgetCenter.shared.reloadAllTimelines()
+            }
 
-        if #available(iOS 16.1, *) {
-            LiveActivityController.shared.update(makeLAContentState())
+            updateGlucoseNotification(force: force)
         }
+
+        if #available(iOS 16.1, *), !readings.isEmpty, isLiveActivityEnabled {
+            let activityIsRunning = LiveActivityController.shared.isRunning
+            let latestDate = readings[0].date
+            let liveActivityReadingChanged = force || latestDate != lastLiveActivityReadingDate
+            let now = Date()
+            if Self.shouldPushLiveActivity(
+                readingChanged: liveActivityReadingChanged,
+                activityIsRunning: activityIsRunning,
+                lastPushAt: lastLiveActivityPushAt,
+                now: now
+            ), LiveActivityController.shared.startOrUpdate(with: makeLAContentState()) {
+                lastLiveActivityReadingDate = latestDate
+                lastLiveActivityPushAt = now
+            }
+        }
+    }
+
+    func setGlucoseNotificationEnabled(_ on: Bool) {
+        UserDefaults.standard.set(on, forKey: Self.glucoseNotificationEnabledKey)
+        guard on else {
+            glucoseNotificationPublisher.remove()
+            lastNotifiedReadingDate = nil
+            return
+        }
+        updateGlucoseNotification(force: true)
+    }
+
+    private func updateGlucoseNotification(force: Bool) {
+        guard isGlucoseNotificationEnabled,
+              let latest = readings.first,
+              force || latest.date != lastNotifiedReadingDate else { return }
+        let timeText = latest.date.formatted(date: .omitted, time: .shortened)
+        glucoseNotificationPublisher.replace(with: GlucoseNotificationController.content(
+            latest: latest,
+            previous: readings.dropFirst().first,
+            units: displayUnits,
+            timeText: timeText
+        ))
+        lastNotifiedReadingDate = latest.date
     }
 
     @available(iOS 16.1, *)
     func setLiveActivityEnabled(_ on: Bool) {
+        UserDefaults.standard.set(on, forKey: Self.liveActivityEnabledKey)
         guard on else { LiveActivityController.shared.stop(); return }
-        guard !readings.isEmpty else { return }
-        LiveActivityController.shared.start(with: makeLAContentState())
+        guard let latest = readings.first else { return }
+        if LiveActivityController.shared.startOrUpdate(with: makeLAContentState()) {
+            lastLiveActivityReadingDate = latest.date
+            lastLiveActivityPushAt = Date()
+        }
     }
 
     @available(iOS 16.1, *)
@@ -267,6 +415,12 @@ enum RefreshError: LocalizedError {
             delta: delta,
             date: latest.date, iob: loopStatus?.iob, unitsRaw: displayUnits.rawValue
         )
+    }
+
+    private func rememberRemoteConfigError(_ error: Error) {
+        if remoteConfigError == nil {
+            remoteConfigError = error.localizedDescription
+        }
     }
 
 }

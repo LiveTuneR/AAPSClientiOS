@@ -33,7 +33,7 @@ final class NightscoutReadTests: XCTestCase {
         XCTAssertEqual(treatments[0].eventType, "Meal Bolus")
     }
 
-    func test_fetchTreatmentsWithSinceAddsFilter() async throws {
+    func test_fetchTreatmentsWithSinceAddsSrvModifiedFilter() async throws {
         let transport = MockAuthTransport()
         transport.responseData = #"{"token":"jwt","iat":1,"exp":99999}"# .data(using: .utf8)!
         let client = NightscoutClientLive(baseURL: testBaseURL, accessToken: "t", transport: transport)
@@ -122,5 +122,35 @@ final class NightscoutReadTests: XCTestCase {
         XCTAssertTrue(url.contains("date$gt=1718571600000"))
         XCTAssertEqual(entries.count, 5)
         XCTAssertEqual(entries[0].iob, 1.20, accuracy: 0.001)
+    }
+
+    func test_fetchRunningConfigColdUsesAapsSettingsEndpoint() async throws {
+        let transport = MockAuthTransport()
+        transport.responseData = #"{"token":"jwt","iat":1,"exp":99999}"#.data(using: .utf8)!
+        let client = NightscoutClientLive(baseURL: testBaseURL, accessToken: "t", transport: transport)
+        try await client.authorize()
+
+        transport.responseData = try loadFixture("settings_aaps")
+        let cold = try await client.fetchRunningConfigCold()
+
+        let url = transport.lastRequest?.url?.absoluteString ?? ""
+        XCTAssertTrue(url.contains("api/v3/settings/aaps"))
+        XCTAssertEqual(cold?.pump, "Dana-i")
+        XCTAssertTrue(cold?.remoteCapabilities.canRemoteProfileSwitch == true)
+    }
+
+    func test_fetchRunningConfigHotUsesStateSettingsEndpoint() async throws {
+        let transport = MockAuthTransport()
+        transport.responseData = #"{"token":"jwt","iat":1,"exp":99999}"#.data(using: .utf8)!
+        let client = NightscoutClientLive(baseURL: testBaseURL, accessToken: "t", transport: transport)
+        try await client.authorize()
+
+        transport.responseData = try loadFixture("settings_aaps_state")
+        let hot = try await client.fetchRunningConfigHot()
+
+        let url = transport.lastRequest?.url?.absoluteString ?? ""
+        XCTAssertTrue(url.contains("api/v3/settings/aaps-state"))
+        XCTAssertEqual(hot?.activeScene?.sceneId, "school-sport")
+        XCTAssertEqual(hot?.usedAutosensOnMainPhone, true)
     }
 }

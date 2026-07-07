@@ -31,7 +31,13 @@ import os
             activity = existing
             return true
         }
-        return activity != nil
+        if let activity,
+           activity.activityState != .dismissed,
+           activity.activityState != .ended {
+            return true
+        }
+        activity = nil
+        return false
     }
 
     @discardableResult
@@ -39,7 +45,7 @@ import os
         guard isSupported else { return false }
         if reattach() { update(state); return true }
         do {
-            let staleDate = Date().addingTimeInterval(15 * 60)
+            let staleDate = liveActivityStaleDate(for: state.date)
             if #available(iOS 16.2, *) {
                 activity = try Activity.request(
                     attributes: GlucoseActivityAttributes(),
@@ -69,7 +75,7 @@ import os
         }
         let bound = activity
         Task {
-            let staleDate = Date().addingTimeInterval(15 * 60)
+            let staleDate = liveActivityStaleDate(for: state.date)
             if #available(iOS 16.2, *) {
                 await bound?.update(ActivityContent(state: state, staleDate: staleDate))
             } else {
@@ -83,9 +89,24 @@ import os
     }
 
     @discardableResult
+    func startOrUpdate(with state: GlucoseActivityAttributes.ContentState) -> Bool {
+        guard isSupported else { return false }
+        if reattach() {
+            update(state)
+            return true
+        }
+        DebugLog.log("LA.update missing activity; restarting mgdl=\(state.mgdl)")
+        return start(with: state)
+    }
+
+    @discardableResult
     func stop() -> Bool {
-        let wasRunning = activity != nil
+        let activities = Activity<GlucoseActivityAttributes>.activities
+        let wasRunning = !activities.isEmpty || activity != nil
         Task {
+            for existing in activities {
+                await existing.end(dismissalPolicy: .immediate)
+            }
             await activity?.end(dismissalPolicy: .immediate)
             activity = nil
         }

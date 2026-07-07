@@ -7,6 +7,9 @@ protocol NightscoutClient: Sendable {
     func fetchDeviceStatus() async throws -> LoopStatus?
     func fetchProfile() async throws -> NsProfile
     func fetchProfileStore() async throws -> NsProfileStore
+    func fetchSettings(identifier: String) async throws -> NsSettingsDocument?
+    func fetchRunningConfigCold() async throws -> NsRunningConfigCold?
+    func fetchRunningConfigHot() async throws -> NsRunningConfigHot?
     func postTreatment(_ payload: [String: Any]) async throws
     /// Latest care-portal events (site/sensor/insulin/battery) — these are infrequent and fall
     /// outside the general treatments window, so they need a dedicated eventType-filtered query.
@@ -22,4 +25,17 @@ extension NightscoutClient {
     func fetchCareEvents() async throws -> [Treatment] { try await fetchTreatments(since: nil) }
     func fetchEntries(sinceDays days: Int) async throws -> [GlucoseReading] { try await fetchEntries(limit: days * 320) }
     func fetchDeviceStatusHistory(since: Date) async throws -> [DeviceStatusEntry] { [] }
+    func fetchRunningConfigCold() async throws -> NsRunningConfigCold? {
+        guard let document = try await fetchSettings(identifier: NightscoutSettingsIdentifier.cold) else { return nil }
+        return try NsMapping.runningConfigCold(from: document)
+    }
+    func fetchRunningConfigHot() async throws -> NsRunningConfigHot? {
+        guard let document = try await fetchSettings(identifier: NightscoutSettingsIdentifier.state) else { return nil }
+        return try NsMapping.runningConfigHot(from: document)
+    }
+}
+
+enum NightscoutSettingsIdentifier {
+    static let cold = "aaps"
+    static let state = "aaps-state"
 }

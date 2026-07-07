@@ -1,0 +1,25 @@
+{
+  "status": 200,
+  "result": {
+    "_id": "aaps-state",
+    "identifier": "aaps-state",
+    "date": 946684800001,
+    "utcOffset": 0,
+    "app": "AAPS",
+    "schemaVersion": 1,
+    "srvModified": 1751328300000,
+    "runningConfig": {
+      "activeScene": {
+        "sceneId": "school-sport",
+        "activatedAt": 1751295600000,
+        "durationMs": 5400000,
+        "lifecycle": "ACTIVE",
+        "ttNsId": "667",
+        "psNsId": "668",
+        "rmNsId": "669",
+        "teNsId": "66a"
+      },
+      "usedAutosensOnMainPhone": true
+    }
+  }
+}

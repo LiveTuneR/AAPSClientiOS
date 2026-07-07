@@ -1,7 +1,75 @@
 import XCTest
 @testable import AAPSClientiOS
 
+@MainActor
 final class AppStoreTests: XCTestCase {
+    func test_liveActivityPreference_migratesRunningActivity() {
+        let suite = "AppStoreTests.liveActivityMigration"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+
+        XCTAssertTrue(AppStore.resolveLiveActivityPreference(defaults: defaults, activityIsRunning: true))
+        XCTAssertTrue(defaults.bool(forKey: AppStore.liveActivityEnabledKey))
+
+        defaults.removePersistentDomain(forName: suite)
+    }
+
+    func test_liveActivityPreference_preservesExplicitOff() {
+        let suite = "AppStoreTests.liveActivityExplicitOff"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        defaults.set(false, forKey: AppStore.liveActivityEnabledKey)
+
+        XCTAssertFalse(AppStore.resolveLiveActivityPreference(defaults: defaults, activityIsRunning: true))
+
+        defaults.removePersistentDomain(forName: suite)
+    }
+
+    func test_liveActivityStaleDate_isBasedOnReadingTimestamp() {
+        let readingDate = Date(timeIntervalSince1970: 1_000)
+        XCTAssertEqual(liveActivityStaleDate(for: readingDate), readingDate.addingTimeInterval(15 * 60))
+    }
+
+    func test_liveActivityPush_skipsUnchangedReadingWhileRunning() {
+        XCTAssertFalse(AppStore.shouldPushLiveActivity(
+            readingChanged: false,
+            activityIsRunning: true,
+            lastPushAt: nil,
+            now: Date()
+        ))
+    }
+
+    func test_liveActivityPush_coalescesChangedReadingsForFiveMinutes() {
+        let lastPush = Date(timeIntervalSince1970: 1_000)
+        XCTAssertFalse(AppStore.shouldPushLiveActivity(
+            readingChanged: true,
+            activityIsRunning: true,
+            lastPushAt: lastPush,
+            now: lastPush.addingTimeInterval(299)
+        ))
+        XCTAssertTrue(AppStore.shouldPushLiveActivity(
+            readingChanged: true,
+            activityIsRunning: true,
+            lastPushAt: lastPush,
+            now: lastPush.addingTimeInterval(300)
+        ))
+    }
+
+    func test_liveActivityPush_sendsFirstReadingOrRestartsMissingActivity() {
+        let now = Date()
+        XCTAssertTrue(AppStore.shouldPushLiveActivity(
+            readingChanged: true,
+            activityIsRunning: true,
+            lastPushAt: nil,
+            now: now
+        ))
+        XCTAssertTrue(AppStore.shouldPushLiveActivity(
+            readingChanged: false,
+            activityIsRunning: false,
+            lastPushAt: now,
+            now: now
+        ))
+    }
 
     func test_refreshFillsStore() async throws {
         let mockClient = FixtureNightscoutClient()
@@ -143,6 +211,45 @@ final class AppStoreTests: XCTestCase {
         XCTAssertEqual(store.deviceStatusHistory[0].iob, 1.20, accuracy: 0.001)
         XCTAssertEqual(store.deviceStatusHistory[2].cob, 35.0, accuracy: 0.01)
     }
+
+    func test_refreshLoadsRemoteRunningConfig() async throws {
+        let client = FixtureNightscoutClient()
+        let store = AppStore(client: client, alarmEngine: AlarmEngineLive())
+
+        try await store.refresh()
+
+        XCTAssertEqual(store.remoteConfigCold?.pump, "Dana-i")
+        XCTAssertEqual(store.remoteConfigHot?.activeScene?.sceneId, "school-sport")
+        XCTAssertTrue(store.remoteCapabilities?.canRemoteCarbs == true)
+        XCTAssertNil(store.remoteConfigError)
+    }
+
+    func test_refreshKeepsMainDataWhenRemoteConfigIsInvalid() async throws {
+        let client = FixtureNightscoutClient()
+        client.settingsByIdentifier[NightscoutSettingsIdentifier.cold] = "settings_invalid"
+        let store = AppStore(client: client, alarmEngine: AlarmEngineLive())
+
+        try await store.refresh()
+
+        XCTAssertEqual(store.readings.count, 2)
+        XCTAssertNil(store.remoteConfigCold)
+        XCTAssertEqual(store.remoteConfigHot?.activeScene?.sceneId, "school-sport")
+        XCTAssertNotNil(store.remoteConfigError)
+        XCTAssertFalse(store.connectionLost)
+    }
+
+    func test_refreshParsesRemoteSyncedPrefs() async throws {
+        let store = AppStore(client: FixtureNightscoutClient(), alarmEngine: AlarmEngineLive())
+
+        try await store.refresh()
+
+        XCTAssertEqual(store.remoteTempTargetPresets.count, 1)
+        XCTAssertEqual(store.remoteTempTargetPresets.first?.name, "Eating Soon")
+        XCTAssertEqual(store.remoteTempTargetPresets.first?.targetMgdl, 90)
+        XCTAssertEqual(store.remoteSceneDefinitions.first?.sceneId, "school-sport")
+        XCTAssertEqual(store.remoteQuickWizardEntries.first?.name, "Breakfast")
+        XCTAssertEqual(store.activeRemoteSceneDisplayName, "School Sport")
+    }
 }
 
 private final class UnconfiguredTestClient: NightscoutClient {
@@ -152,6 +259,9 @@ private final class UnconfiguredTestClient: NightscoutClient {
     func fetchDeviceStatus() async throws -> LoopStatus? { throw NsError.badURL }
     func fetchProfile() async throws -> NsProfile { throw NsError.badURL }
     func fetchProfileStore() async throws -> NsProfileStore { throw NsError.badURL }
+    func fetchSettings(identifier: String) async throws -> NsSettingsDocument? { throw NsError.badURL }
+    func fetchRunningConfigCold() async throws -> NsRunningConfigCold? { throw NsError.badURL }
+    func fetchRunningConfigHot() async throws -> NsRunningConfigHot? { throw NsError.badURL }
     func postTreatment(_ payload: [String: Any]) async throws { throw NsError.badURL }
     func fetchCareEvents() async throws -> [Treatment] { throw NsError.badURL }
     func fetchEntries(sinceDays days: Int) async throws -> [GlucoseReading] { throw NsError.badURL }

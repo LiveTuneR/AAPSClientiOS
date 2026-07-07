@@ -8,9 +8,12 @@ struct PeriodCache<Key: Hashable, Value> {
         self.ttl = ttl
     }
 
-    func value(for key: Key, now: Date = Date()) -> Value? {
+    func value(for key: Key, now: Date = Date(), newerThan: Date? = nil) -> Value? {
         guard let entry = entries[key] else { return nil }
         guard now.timeIntervalSince(entry.cachedAt) < ttl else { return nil }
+        if let newerThan, entry.cachedAt < newerThan {
+            return nil
+        }
         return entry.value
     }
 

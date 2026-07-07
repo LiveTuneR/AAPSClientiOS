@@ -36,7 +36,11 @@ struct AAPSClientApp: App {
         }
 
         let alarmEngine = AlarmEngineLive(notifier: UNNotifier())
-        let store = AppStore(client: client, alarmEngine: alarmEngine)
+        let store = AppStore(
+            client: client,
+            alarmEngine: alarmEngine,
+            glucoseNotificationPublisher: GlucoseNotificationController()
+        )
         _store = StateObject(wrappedValue: store)
         writer = NsTreatmentWriterLive(clientProvider: { [store] in store.client })
         bgScheduler = BackgroundScheduler(store: store)
@@ -105,5 +109,8 @@ final class UnconfiguredClient: NightscoutClient, @unchecked Sendable {
     func fetchDeviceStatus() async throws -> LoopStatus? { throw NsError.badURL }
     func fetchProfile() async throws -> NsProfile { throw NsError.badURL }
     func fetchProfileStore() async throws -> NsProfileStore { throw NsError.badURL }
+    func fetchSettings(identifier: String) async throws -> NsSettingsDocument? { throw NsError.badURL }
+    func fetchRunningConfigCold() async throws -> NsRunningConfigCold? { throw NsError.badURL }
+    func fetchRunningConfigHot() async throws -> NsRunningConfigHot? { throw NsError.badURL }
     func postTreatment(_ payload: [String: Any]) async throws { throw NsError.badURL }
 }

@@ -140,6 +140,62 @@ enum NsMapping {
         )
     }
 
+    static func settingsDocument(from data: Data, identifier: String) throws -> NsSettingsDocument? {
+        guard let doc = try resultObject(data) else { return nil }
+        guard let runningConfig = doc["runningConfig"] else {
+            throw NsError.decoding("Settings \(identifier) missing runningConfig")
+        }
+        guard JSONSerialization.isValidJSONObject(runningConfig),
+              let runningData = try? JSONSerialization.data(withJSONObject: runningConfig),
+              let runningJson = String(data: runningData, encoding: .utf8) else {
+            throw NsError.decoding("Settings \(identifier) has invalid runningConfig")
+        }
+        return NsSettingsDocument(
+            identifier: identifier,
+            app: doc["app"] as? String,
+            schemaVersion: intVal(doc["schemaVersion"]),
+            date: millisDate(from: num(doc["date"])),
+            srvModified: millisDate(from: num(doc["srvModified"])),
+            runningConfigJson: runningJson
+        )
+    }
+
+    static func runningConfigCold(from document: NsSettingsDocument) throws -> NsRunningConfigCold {
+        let config = try runningConfigObject(from: document)
+        let authorized = config["authorizedClients"] as? [String: Any]
+        let clientIds = (authorized?["clientIds"] as? [Any])?.compactMap { $0 as? String } ?? []
+        return NsRunningConfigCold(
+            pump: config["pump"] as? String,
+            version: config["version"] as? String,
+            isFakingTempsByExtendedBoluses: boolVal(config["isFakingTempsByExtendedBoluses"]),
+            syncedPrefs: stringMap(config["syncedPrefs"]),
+            authorizedClientIds: clientIds,
+            srvModified: document.srvModified
+        )
+    }
+
+    static func runningConfigHot(from document: NsSettingsDocument) throws -> NsRunningConfigHot {
+        let config = try runningConfigObject(from: document)
+        let activeSceneDict = config["activeScene"] as? [String: Any]
+        let activeScene = activeSceneDict.map { scene in
+            NsActiveScene(
+                sceneId: scene["sceneId"] as? String,
+                activatedAt: millisDate(from: num(scene["activatedAt"])),
+                durationMs: intVal(scene["durationMs"]),
+                lifecycle: scene["lifecycle"] as? String,
+                ttNsId: scene["ttNsId"] as? String,
+                psNsId: scene["psNsId"] as? String,
+                rmNsId: scene["rmNsId"] as? String,
+                teNsId: scene["teNsId"] as? String
+            )
+        }
+        return NsRunningConfigHot(
+            activeScene: activeScene,
+            usedAutosensOnMainPhone: boolVal(config["usedAutosensOnMainPhone"]),
+            srvModified: document.srvModified
+        )
+    }
+
     // MARK: - Private helpers
 
     private static func resultArray(_ data: Data) throws -> [[String: Any]] {
@@ -148,6 +204,25 @@ enum NsMapping {
             throw NsError.decoding("Unexpected NS v3 response shape")
         }
         return (dict["result"] as? [[String: Any]]) ?? []
+    }
+
+    private static func resultObject(_ data: Data) throws -> [String: Any]? {
+        let object = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+        guard let dict = object as? [String: Any] else {
+            throw NsError.decoding("Unexpected NS v3 response shape")
+        }
+        if dict["result"] is NSNull { return nil }
+        if let result = dict["result"] as? [String: Any] { return result }
+        if dict["result"] == nil { return nil }
+        throw NsError.decoding("Unexpected NS settings response shape")
+    }
+
+    private static func runningConfigObject(from document: NsSettingsDocument) throws -> [String: Any] {
+        guard let data = document.runningConfigJson.data(using: .utf8),
+              let config = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) as? [String: Any] else {
+            throw NsError.decoding("Settings \(document.identifier) has invalid runningConfig")
+        }
+        return config
     }
 
     private static func predictions(from src: [String: Any]?) -> Predictions? {
@@ -168,8 +243,39 @@ enum NsMapping {
         num(value).map { Int($0) }
     }
 
+    private static func boolVal(_ value: Any?) -> Bool? {
+        if let bool = value as? Bool { return bool }
+        if let n = value as? NSNumber { return n.boolValue }
+        if let s = value as? String {
+            switch s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+            case "true", "1": return true
+            case "false", "0": return false
+            default: return nil
+            }
+        }
+        return nil
+    }
+
+    private static func stringMap(_ value: Any?) -> [String: String] {
+        guard let dict = value as? [String: Any] else { return [:] }
+        return dict.reduce(into: [:]) { partialResult, item in
+            switch item.value {
+            case let string as String:
+                partialResult[item.key] = string
+            case let number as NSNumber:
+                partialResult[item.key] = number.stringValue
+            default:
+                break
+            }
+        }
+    }
+
     private static func date(from millis: Double?) -> Date {
         millis.map { Date(timeIntervalSince1970: $0 / 1000) } ?? Date()
+    }
+
+    private static func millisDate(from millis: Double?) -> Date? {
+        millis.map { Date(timeIntervalSince1970: $0 / 1000) }
     }
 
     private static func parseReason(from enacted: [String: Any]?) -> LoopReason {

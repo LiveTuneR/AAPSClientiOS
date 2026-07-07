@@ -8,6 +8,7 @@ struct StatisticsView: View {
     @State private var loaded: [GlucoseReading] = []
     @State private var loading = false
     @State private var cache = PeriodCache<Int, [GlucoseReading]>(ttl: 60)
+    @State private var loadError: String?
 
     private var units: GlucoseUnits { store.displayUnits }
 
@@ -36,6 +37,11 @@ struct StatisticsView: View {
             Section("Glucose") {
                 if loading && loaded.isEmpty {
                     ProgressView().frame(maxWidth: .infinity)
+                } else if let loadError {
+                    Text(loadError)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 } else if period == 1 {
                     glucoseChart
                 } else {
@@ -68,16 +74,20 @@ struct StatisticsView: View {
     }
 
     private func load() async {
-        if let cached = cache.value(for: period) {
+        if let cached = cache.value(for: period, newerThan: store.lastRefresh) {
             loaded = cached
+            loadError = nil
             return
         }
         loading = true
         defer { loading = false }
-        store.ensureConfigured()
-        if let data = try? await store.client.fetchEntries(sinceDays: period) {
+        do {
+            let data = try await store.fetchHistory(days: period)
             loaded = data
             cache.store(data, for: period)
+            loadError = nil
+        } catch {
+            loadError = error.localizedDescription
         }
     }
 

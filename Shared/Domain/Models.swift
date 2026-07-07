@@ -55,7 +55,7 @@ struct Predictions: Equatable {
     let uam: [Int]
 }
 
-struct Treatment: Equatable, Identifiable {
+struct Treatment: Equatable, Identifiable, Codable {
     let id: String
     let eventType: String
     let date: Date
@@ -70,6 +70,38 @@ struct Treatment: Equatable, Identifiable {
     let percentage: Int?
     let absolute: Double?
     let tempBasalPercent: Int?
+
+    static func activeTempTarget(in treatments: [Treatment], now: Date = Date()) -> Treatment? {
+        guard let latest = treatments
+            .filter({ $0.eventType == "Temporary Target" && $0.date <= now })
+            .max(by: { $0.date < $1.date }),
+              let duration = latest.durationMin,
+              duration > 0,
+              latest.targetBottom != nil || latest.targetTop != nil,
+              latest.date.addingTimeInterval(Double(duration) * 60) > now else {
+            return nil
+        }
+        return latest
+    }
+
+    static func mergedHistoryWindow(
+        existing: [Treatment],
+        incoming: [Treatment],
+        now: Date = Date(),
+        days: Int = 7
+    ) -> [Treatment] {
+        let cutoff = now.addingTimeInterval(-Double(days) * 86_400)
+        var byID: [String: Treatment] = [:]
+
+        for treatment in existing where treatment.date >= cutoff {
+            byID[treatment.id] = treatment
+        }
+        for treatment in incoming where treatment.date >= cutoff {
+            byID[treatment.id] = treatment
+        }
+
+        return byID.values.sorted { $0.date > $1.date }
+    }
 }
 
 struct NsProfile: Equatable {
@@ -87,6 +119,232 @@ struct NsProfileStore: Equatable {
     let profileNames: [String]
     let rawJson: [String: String]
     let active: NsProfile
+}
+
+struct NsSettingsDocument: Equatable, Sendable {
+    let identifier: String
+    let app: String?
+    let schemaVersion: Int?
+    let date: Date?
+    let srvModified: Date?
+    let runningConfigJson: String
+}
+
+struct NsAuthorizedClients: Equatable, Sendable {
+    let clientIds: [String]
+}
+
+struct NsActiveScene: Equatable, Sendable {
+    let sceneId: String?
+    let activatedAt: Date?
+    let durationMs: Int?
+    let lifecycle: String?
+    let ttNsId: String?
+    let psNsId: String?
+    let rmNsId: String?
+    let teNsId: String?
+}
+
+struct NsSyncedPrefsSnapshot: Equatable, Sendable {
+    let rawValues: [String: String]
+
+    var activePluginAps: String? { rawValues["ActivePluginAps"] }
+    var activePluginSensitivity: String? { rawValues["ActivePluginSensitivity"] }
+    var activePluginSmoothing: String? { rawValues["ActivePluginSmoothing"] }
+    var activePluginCalibration: String? { rawValues["ActivePluginCalibration"] }
+    var tempTargetPresetsJson: String? { rawValues["TempTargetPresets"] ?? rawValues["temp_target_presets"] }
+    var quickWizardJson: String? { rawValues["QuickWizard"] }
+    var sceneDefinitionsJson: String? { rawValues["SceneDefinitions"] }
+}
+
+struct NsRunningConfigCold: Equatable, Sendable {
+    var pump: String?
+    var version: String?
+    var isFakingTempsByExtendedBoluses: Bool?
+    var syncedPrefs: [String: String]
+    var authorizedClientIds: [String]
+    var srvModified: Date?
+
+    var syncedPrefsSnapshot: NsSyncedPrefsSnapshot {
+        NsSyncedPrefsSnapshot(rawValues: syncedPrefs)
+    }
+
+    var remoteCapabilities: NsRemoteCapabilities {
+        NsRemoteCapabilities(syncedPrefs: syncedPrefs)
+    }
+}
+
+struct NsRunningConfigHot: Equatable, Sendable {
+    var activeScene: NsActiveScene?
+    var usedAutosensOnMainPhone: Bool?
+    var srvModified: Date?
+}
+
+struct NsRemoteCapabilities: Equatable, Sendable {
+    let canReceiveProfileStore: Bool
+    let canRemoteProfileSwitch: Bool
+    let canRemoteTempTarget: Bool
+    let canRemoteCarbs: Bool
+    let canRemoteTherapyEvents: Bool
+    let canRemoteRunningMode: Bool
+    let canRemoteTbrEb: Bool
+    let clientControlEnabled: Bool
+    let usesWebSockets: Bool
+
+    init(syncedPrefs: [String: String]) {
+        canReceiveProfileStore = Self.boolFlag(["NsClientAcceptProfileStore", "ns_receive_profile_store"], in: syncedPrefs)
+        canRemoteProfileSwitch = Self.boolFlag(["NsClientAcceptProfileSwitch", "ns_receive_profile_switch"], in: syncedPrefs)
+        canRemoteTempTarget = Self.boolFlag(["NsClientAcceptTempTarget", "ns_receive_temp_target"], in: syncedPrefs)
+        canRemoteCarbs = Self.boolFlag(["NsClientAcceptCarbs", "ns_receive_carbs"], in: syncedPrefs)
+        canRemoteTherapyEvents = Self.boolFlag(["NsClientAcceptTherapyEvent", "ns_receive_therapy_events"], in: syncedPrefs)
+        canRemoteRunningMode = Self.boolFlag(["NsClientAcceptRunningMode", "ns_receive_running_mode"], in: syncedPrefs)
+        canRemoteTbrEb = Self.boolFlag(["NsClientAcceptTbrEb", "ns_receive_tbr_eb"], in: syncedPrefs)
+        clientControlEnabled = Self.boolFlag(["NsClientAllowClientControl", "ns_allow_client_control"], in: syncedPrefs)
+        usesWebSockets = Self.boolFlag(["NsClient3UseWs", "ns_use_ws"], in: syncedPrefs)
+    }
+
+    private static func boolFlag(_ keys: [String], in syncedPrefs: [String: String]) -> Bool {
+        let normalized = Dictionary(
+            uniqueKeysWithValues: syncedPrefs.map { key, value in
+                (normalize(key), value)
+            }
+        )
+        return keys.contains { key in
+            guard let raw = normalized[normalize(key)]?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() else {
+                return false
+            }
+            return raw == "true" || raw == "1"
+        }
+    }
+
+    private static func normalize(_ key: String) -> String {
+        key.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+}
+
+extension NsRemoteCapabilities {
+    func isEnabled(for key: NsRemoteCapabilityKey) -> Bool {
+        switch key {
+        case .profileSwitch: return canRemoteProfileSwitch
+        case .tempTarget: return canRemoteTempTarget
+        case .carbs: return canRemoteCarbs
+        case .therapyEvents: return canRemoteTherapyEvents
+        case .runningMode: return canRemoteRunningMode
+        }
+    }
+}
+
+enum NsRemoteCapabilityKey: String, Sendable {
+    case profileSwitch = "NsClientAcceptProfileSwitch"
+    case tempTarget = "NsClientAcceptTempTarget"
+    case carbs = "NsClientAcceptCarbs"
+    case therapyEvents = "NsClientAcceptTherapyEvent"
+    case runningMode = "NsClientAcceptRunningMode"
+
+    var localizationKey: String {
+        switch self {
+        case .profileSwitch: return "remote.capability.profile"
+        case .tempTarget: return "remote.capability.target"
+        case .carbs: return "remote.capability.carbs"
+        case .therapyEvents: return "remote.capability.events"
+        case .runningMode: return "remote.capability.loop"
+        }
+    }
+}
+
+struct NsSyncedTempTargetPreset: Equatable, Identifiable, Sendable {
+    let name: String
+    let targetMgdl: Int
+    let durationMin: Int
+
+    var id: String { name }
+}
+
+struct NsSceneDefinition: Equatable, Identifiable, Sendable {
+    let sceneId: String
+    let name: String?
+
+    var id: String { sceneId }
+}
+
+struct NsQuickWizardEntry: Equatable, Identifiable, Sendable {
+    let name: String
+    let carbs: Int?
+    let percentage: Int?
+    let note: String?
+
+    var id: String { name }
+}
+
+enum NsSyncedPrefsParser {
+    static func tempTargetPresets(from json: String?) -> [NsSyncedTempTargetPreset] {
+        guard let items = jsonArray(from: json) else { return [] }
+        return items.compactMap { item in
+            let name = firstString(in: item, keys: ["name", "displayName", "label"])?.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let name, !name.isEmpty else { return nil }
+            let durationMin = int(item["durationMin"]) ?? int(item["duration"]) ?? int(item["minutes"])
+            let rawTarget = number(item["targetMgdl"]) ?? number(item["target"]) ?? number(item["targetBottom"]) ?? number(item["targetTop"])
+            guard let durationMin, durationMin > 0, let rawTarget else { return nil }
+            let targetMgdl = normalizeGlucoseTarget(rawTarget)
+            return NsSyncedTempTargetPreset(name: name, targetMgdl: targetMgdl, durationMin: durationMin)
+        }
+    }
+
+    static func sceneDefinitions(from json: String?) -> [NsSceneDefinition] {
+        guard let items = jsonArray(from: json) else { return [] }
+        return items.compactMap { item in
+            guard let sceneId = firstString(in: item, keys: ["sceneId", "id"])?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !sceneId.isEmpty else { return nil }
+            let name = firstString(in: item, keys: ["name", "title", "displayName"])
+            return NsSceneDefinition(sceneId: sceneId, name: name)
+        }
+    }
+
+    static func quickWizardEntries(from json: String?) -> [NsQuickWizardEntry] {
+        guard let items = jsonArray(from: json) else { return [] }
+        return items.compactMap { item in
+            guard let name = firstString(in: item, keys: ["name", "buttonText", "label"])?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !name.isEmpty else { return nil }
+            return NsQuickWizardEntry(
+                name: name,
+                carbs: int(item["carbs"]) ?? int(item["carbInput"]),
+                percentage: int(item["percentage"]),
+                note: firstString(in: item, keys: ["note", "notes", "description"])
+            )
+        }
+    }
+
+    private static func jsonArray(from json: String?) -> [[String: Any]]? {
+        guard let json, let data = json.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) else {
+            return nil
+        }
+        return object as? [[String: Any]]
+    }
+
+    private static func firstString(in dict: [String: Any], keys: [String]) -> String? {
+        for key in keys {
+            if let value = dict[key] as? String, !value.isEmpty {
+                return value
+            }
+        }
+        return nil
+    }
+
+    private static func number(_ value: Any?) -> Double? {
+        if let n = value as? NSNumber { return n.doubleValue }
+        if let s = value as? String { return Double(s) }
+        return nil
+    }
+
+    private static func int(_ value: Any?) -> Int? {
+        number(value).map { Int($0) }
+    }
+
+    private static func normalizeGlucoseTarget(_ value: Double) -> Int {
+        let mgdl = value < 40 ? value * glucoseMmolFactor : value
+        return Int(mgdl.rounded())
+    }
 }
 
 struct BasalEntry: Equatable {
@@ -193,4 +451,18 @@ let glucoseMmolFactor = 18.0182
 func convertUnit(value: Double, from: GlucoseUnits, to: GlucoseUnits) -> Double {
     if from == to { return value }
     return from == .mgdl ? value / glucoseMmolFactor : value * glucoseMmolFactor
+}
+
+enum SettingsValueConverter {
+    static func convert(_ text: String, from: GlucoseUnits, to: GlucoseUnits) -> String {
+        guard from != to, let value = Double(text) else { return text }
+        let converted = convertUnit(value: value, from: from, to: to)
+        return to == .mmol
+            ? String(format: "%.1f", converted)
+            : String(Int(converted.rounded()))
+    }
+}
+
+func liveActivityStaleDate(for readingDate: Date, staleMinutes: Int = 15) -> Date {
+    readingDate.addingTimeInterval(Double(staleMinutes) * 60)
 }

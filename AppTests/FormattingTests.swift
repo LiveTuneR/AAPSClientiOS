@@ -2,6 +2,17 @@ import XCTest
 @testable import AAPSClientiOS
 
 final class FormattingTests: XCTestCase {
+    func test_settingsValueConversion_mgdlToMmol() {
+        XCTAssertEqual(SettingsValueConverter.convert("70", from: .mgdl, to: .mmol), "3.9")
+    }
+
+    func test_settingsValueConversion_mmolToMgdl() {
+        XCTAssertEqual(SettingsValueConverter.convert("3.9", from: .mmol, to: .mgdl), "70")
+    }
+
+    func test_settingsValueConversion_preservesInvalidInput() {
+        XCTAssertEqual(SettingsValueConverter.convert("", from: .mgdl, to: .mmol), "")
+    }
 
     private let thresholds = AlarmThresholds(urgentLow: 55, low: 70, high: 180, urgentHigh: 250, staleMinutes: 15)
 

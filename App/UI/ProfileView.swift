@@ -12,6 +12,15 @@ struct ProfileView: View {
     @State private var statusMessage: String?
     @State private var statusIsError = false
 
+    private var canSwitchProfile: Bool {
+        store.remoteCapabilities?.canRemoteProfileSwitch ?? true
+    }
+
+    private var profileSwitchReason: String? {
+        guard store.remoteCapabilities != nil, !canSwitchProfile else { return nil }
+        return String(format: String(localized: "remote.disabled_reason"), NsRemoteCapabilityKey.profileSwitch.rawValue)
+    }
+
     private var units: GlucoseUnits { store.displayUnits }
 
     var body: some View {
@@ -20,7 +29,14 @@ struct ProfileView: View {
                 Section("Profiles") {
                     ForEach(ps.profileNames, id: \.self) { name in
                         profileCard(name, isActive: isActive(name))
-                            .onTapGesture { selectedName = name }
+                            .onTapGesture {
+                                guard canSwitchProfile else {
+                                    statusMessage = profileSwitchReason
+                                    statusIsError = true
+                                    return
+                                }
+                                selectedName = name
+                            }
                     }
                 }
                 if let active = store.activeProfileSwitch?.profileName,
@@ -38,6 +54,12 @@ struct ProfileView: View {
 
             if let msg = statusMessage {
                 Text(msg).foregroundColor(statusIsError ? .red : .green)
+            }
+
+            if let reason = profileSwitchReason {
+                Text(reason)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
         }
         .navigationTitle("Profile")
@@ -94,6 +116,11 @@ struct ProfileView: View {
     }
 
     private func switchTo(_ name: String) {
+        guard canSwitchProfile else {
+            statusMessage = profileSwitchReason
+            statusIsError = true
+            return
+        }
         guard let pct = Int(switchPct), (30...250).contains(pct),
               let dur = Int(switchDur), dur > 0 else { return }
         let json = store.profileStore?.rawJson[name]
@@ -137,6 +164,11 @@ struct ProfileView: View {
             if isActive {
                 Text("Active").font(.caption).padding(.horizontal, 8).padding(.vertical, 3)
                     .background(Color.green.opacity(0.2)).cornerRadius(4)
+            }
+            if !canSwitchProfile {
+                Image(systemName: "lock.fill")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
             }
         }
         .padding(.vertical, 4)
@@ -215,4 +247,3 @@ private struct TargetBandChart: View {
         points.last(where: { $0.hour <= hour })?.value ?? points.first?.value ?? 0
     }
 }
-

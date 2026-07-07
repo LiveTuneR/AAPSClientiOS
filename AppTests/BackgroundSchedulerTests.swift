@@ -23,12 +23,14 @@ final class SpyTaskScheduler: BGTaskScheduling {
 }
 
 final class BackgroundSchedulerTests: XCTestCase {
+    @MainActor
     private func makeStore() -> AppStore {
         AppStore(client: FixtureNightscoutClient(), alarmEngine: AlarmEngineLive())
     }
 
     // BGTaskScheduler is unsupported for "Designed for iPad" apps running on Mac;
     // calling register()/submit() there throws an uncaught NSException at launch.
+    @MainActor
     func test_register_skipsBGTaskScheduler_whenRunningOnMac() {
         let spy = SpyTaskScheduler()
         let scheduler = BackgroundScheduler(store: makeStore(), scheduler: spy, isRunningOnMac: true)
@@ -38,6 +40,7 @@ final class BackgroundSchedulerTests: XCTestCase {
         XCTAssertTrue(spy.registeredIdentifiers.isEmpty)
     }
 
+    @MainActor
     func test_schedule_skipsBGTaskScheduler_whenRunningOnMac() {
         let spy = SpyTaskScheduler()
         let scheduler = BackgroundScheduler(store: makeStore(), scheduler: spy, isRunningOnMac: true)
@@ -47,6 +50,7 @@ final class BackgroundSchedulerTests: XCTestCase {
         XCTAssertTrue(spy.submittedRequests.isEmpty)
     }
 
+    @MainActor
     func test_register_registersRefreshTask_whenRunningOniOS() {
         let spy = SpyTaskScheduler()
         let scheduler = BackgroundScheduler(store: makeStore(), scheduler: spy, isRunningOnMac: false)
@@ -56,6 +60,7 @@ final class BackgroundSchedulerTests: XCTestCase {
         XCTAssertEqual(spy.registeredIdentifiers, [BackgroundScheduler.refreshTaskId])
     }
 
+    @MainActor
     func test_schedule_submitsRefreshRequest_whenRunningOniOS() {
         let spy = SpyTaskScheduler()
         let scheduler = BackgroundScheduler(store: makeStore(), scheduler: spy, isRunningOnMac: false)
