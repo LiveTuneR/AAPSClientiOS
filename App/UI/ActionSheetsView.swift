@@ -58,9 +58,20 @@ enum HomeActions {
         }
     }
 
-    static func switchProfile(name: String, percentage: Int, durationMin: Int, profileJson: String?, writer: NsTreatmentWriter, store: AppStore) async -> (message: String, isError: Bool) {
+    static func switchProfile(
+        name: String, percentage: Int, durationMin: Int, timeshiftHours: Int,
+        profileJson: String?, startActivityTarget: Bool,
+        writer: NsTreatmentWriter, store: AppStore
+    ) async -> (message: String, isError: Bool) {
         do {
-            try await writer.switchProfile(name: name, percentage: percentage, durationMin: durationMin, profileJson: profileJson)
+            try await writer.switchProfile(name: name, percentage: percentage, durationMin: durationMin, timeshiftHours: timeshiftHours, profileJson: profileJson)
+            // Matches AndroidAPS's ProfileSwitchDialog.submit(): only dose-reducing,
+            // time-limited switches can optionally start the Activity temp target.
+            if startActivityTarget, durationMin > 0, percentage < 100 {
+                let presets = await store.ttPresets
+                let targetMgdl = presets[.activity]?.targetMgdl ?? TtReason.activity.defaultTargetMgdl
+                try? await writer.sendTempTarget(targetMgdl: targetMgdl, durationMin: durationMin, reason: .activity)
+            }
             try? await store.refresh()
             return ("Profile switched", false)
         } catch {
@@ -209,6 +220,8 @@ struct ProfileSwitchSheetView: View {
     @Binding var selectedProfileName: String
     @Binding var profilePercentage: String
     @Binding var profileDuration: String
+    @Binding var profileTimeshift: String
+    @Binding var startActivityTarget: Bool
     @Binding var statusMessage: String?
     @Binding var statusIsError: Bool
     let units: GlucoseUnits
@@ -226,6 +239,8 @@ struct ProfileSwitchSheetView: View {
                 }
                 TextField("Percentage (30-250)", text: $profilePercentage).keyboardType(.numberPad)
                 TextField("Duration (0=permanent)", text: $profileDuration).keyboardType(.numberPad)
+                TextField("Timeshift hours (-23 to 23)", text: $profileTimeshift).keyboardType(.numbersAndPunctuation)
+                Toggle("Also start Activity temp target (needs % < 100 and duration > 0)", isOn: $startActivityTarget)
             }
             .navigationTitle("Profile Switch")
             .toolbar {

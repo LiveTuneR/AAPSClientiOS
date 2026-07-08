@@ -28,8 +28,8 @@ final class NsTreatmentWriterLive: NsTreatmentWriter, @unchecked Sendable {
         try await client.postTreatment(Self.buildTempTargetCancel())
     }
 
-    func switchProfile(name: String, percentage: Int, durationMin: Int, profileJson: String?) async throws {
-        try await client.postTreatment(Self.buildProfileSwitch(name: name, percentage: percentage, durationMin: durationMin, profileJson: profileJson))
+    func switchProfile(name: String, percentage: Int, durationMin: Int, timeshiftHours: Int, profileJson: String?) async throws {
+        try await client.postTreatment(Self.buildProfileSwitch(name: name, percentage: percentage, durationMin: durationMin, timeshiftHours: timeshiftHours, profileJson: profileJson))
     }
 
     func logEvent(eventType: String, at date: Date, notes: String?, glucoseMgdl: Int?, durationMin: Int?) async throws {
@@ -74,13 +74,14 @@ final class NsTreatmentWriterLive: NsTreatmentWriter, @unchecked Sendable {
         ]
     }
 
-    static func buildProfileSwitch(name: String, percentage: Int, durationMin: Int, profileJson: String?) -> [String: Any] {
+    static func buildProfileSwitch(name: String, percentage: Int, durationMin: Int, timeshiftHours: Int, profileJson: String?) -> [String: Any] {
         var payload: [String: Any] = [
             "app": appName,
             "eventType": "Profile Switch",
             "profile": name,
             "percentage": percentage,
             "duration": durationMin,
+            "timeshift": timeshiftHours,
             "date": Int64(Date().timeIntervalSince1970 * 1000),
             "enteredBy": appName,
         ]

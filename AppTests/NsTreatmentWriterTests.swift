@@ -135,6 +135,26 @@ final class NsTreatmentWriterTests: XCTestCase {
         XCTAssertNotNil(p["profileJson"])
     }
 
+    func test_profileSwitchPayloadIncludesTimeshift() async throws {
+        let mock = FixtureNightscoutClient()
+        let writer = NsTreatmentWriterLive(client: mock)
+
+        try await writer.switchProfile(name: "Default", percentage: 120, durationMin: 60, timeshiftHours: 3, profileJson: nil)
+
+        let p = try XCTUnwrap(mock.postedPayloads.first)
+        XCTAssertEqual(p["timeshift"] as? Int, 3)
+    }
+
+    func test_profileSwitchDefaultTimeshiftIsZero() async throws {
+        let mock = FixtureNightscoutClient()
+        let writer = NsTreatmentWriterLive(client: mock)
+
+        try await writer.switchProfile(name: "Default", percentage: 100, durationMin: 0, profileJson: nil)
+
+        let p = try XCTUnwrap(mock.postedPayloads.first)
+        XCTAssertEqual(p["timeshift"] as? Int, 0)
+    }
+
     func test_profileSwitchPayload_afterAddingBasalBlock() async throws {
         let data = try loadFixture("profile")
         let store = try NsMapping.profileStore(from: data)

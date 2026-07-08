@@ -19,6 +19,8 @@ struct HomeView: View {
     @State private var selectedProfileName = ""
     @State private var profilePercentage = "100"
     @State private var profileDuration = "0"
+    @State private var profileTimeshift = "0"
+    @State private var startActivityTarget = false
     @State private var showEventSheet = false
     @State private var showLoopMenu = false
     @State private var showCarbsConfirm = false
@@ -166,6 +168,8 @@ struct HomeView: View {
             selectedProfileName: $selectedProfileName,
             profilePercentage: $profilePercentage,
             profileDuration: $profileDuration,
+            profileTimeshift: $profileTimeshift,
+            startActivityTarget: $startActivityTarget,
             statusMessage: $statusMessage,
             statusIsError: $statusIsError,
             units: units
@@ -225,10 +229,20 @@ struct HomeView: View {
             return
         }
         guard let pct = Int(profilePercentage), (30...250).contains(pct),
-              let dur = Int(profileDuration), dur >= 0 else { return }
+              let dur = Int(profileDuration), dur >= 0,
+              let shift = Int(profileTimeshift), (-23...23).contains(shift) else { return }
         let json = store.profileStore?.rawJson[selectedProfileName]
         Task {
-            let result = await HomeActions.switchProfile(name: selectedProfileName, percentage: pct, durationMin: dur, profileJson: json, writer: writer, store: store)
+            let result = await HomeActions.switchProfile(
+                name: selectedProfileName,
+                percentage: pct,
+                durationMin: dur,
+                timeshiftHours: shift,
+                profileJson: json,
+                startActivityTarget: startActivityTarget,
+                writer: writer,
+                store: store
+            )
             statusMessage = result.message
             statusIsError = result.isError
         }
