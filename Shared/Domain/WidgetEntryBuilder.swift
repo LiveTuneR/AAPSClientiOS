@@ -12,9 +12,34 @@ struct GlucoseWidgetEntry: Equatable {
     let isStale: Bool
     let iob: Double?
     let cob: Double?
+    let tempBasalRate: Double?
+    let activeProfileName: String?
+    let activeProfilePercentage: Int?
     let classification: GlucoseClassification
     let units: GlucoseUnits
     let state: State
+
+    init(
+        mgdl: Int, trend: TrendArrow, delta: Int?, date: Date, minutesAgo: Int,
+        isStale: Bool, iob: Double?, cob: Double?, tempBasalRate: Double? = nil,
+        activeProfileName: String? = nil, activeProfilePercentage: Int? = nil,
+        classification: GlucoseClassification, units: GlucoseUnits, state: State
+    ) {
+        self.mgdl = mgdl
+        self.trend = trend
+        self.delta = delta
+        self.date = date
+        self.minutesAgo = minutesAgo
+        self.isStale = isStale
+        self.iob = iob
+        self.cob = cob
+        self.tempBasalRate = tempBasalRate
+        self.activeProfileName = activeProfileName
+        self.activeProfilePercentage = activeProfilePercentage
+        self.classification = classification
+        self.units = units
+        self.state = state
+    }
 
     /// Placeholder shown when no credentials / no data are available.
     static func noData(units: GlucoseUnits, now: Date) -> GlucoseWidgetEntry {
@@ -49,6 +74,7 @@ enum WidgetEntryBuilder {
             isStale: isStale,
             iob: loop?.iob,
             cob: loop?.cob,
+            tempBasalRate: loop?.tempBasalRate,
             classification: Formatting.classify(mgdl: latest.mgdl, thresholds: config.thresholds),
             units: config.units,
             state: .data

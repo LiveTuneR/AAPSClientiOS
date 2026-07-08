@@ -6,12 +6,26 @@ import SwiftUI
 struct GlucoseLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: GlucoseActivityAttributes.self) { context in
-            HStack {
-                Text(value(context.state)).font(.title2).bold()
-                Text(trend(context.state))
-                Spacer()
-                if let iob = context.state.iob { Text(String(format: "IOB %.1f", iob)).font(.caption) }
-                Text(context.state.date, style: .relative).font(.caption2).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(value(context.state)).font(.title2).bold()
+                    Text(trend(context.state))
+                    Spacer()
+                    if let iob = context.state.iob { Text(String(format: "IOB %.1f", iob)).font(.caption) }
+                    if let cob = context.state.cob { Text(String(format: "COB %.0f", cob)).font(.caption) }
+                    Text(context.state.date, style: .relative).font(.caption2).foregroundStyle(.secondary)
+                }
+                if context.state.tempBasalRate != nil || context.state.activeProfileName != nil {
+                    HStack {
+                        if let rate = context.state.tempBasalRate { Text(String(format: "Basal %.2f U/h", rate)).font(.caption2) }
+                        if let name = context.state.activeProfileName {
+                            let pct = context.state.activeProfilePercentage ?? 100
+                            Text(pct == 100 ? name : "\(name) (\(pct)%)").font(.caption2)
+                        }
+                        Spacer()
+                    }
+                    .foregroundStyle(.secondary)
+                }
             }
             .padding()
         } dynamicIsland: { context in
@@ -23,11 +37,24 @@ struct GlucoseLiveActivity: Widget {
                     Text(trend(context.state))
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    HStack {
-                        if let d = context.state.delta { Text(delta(d, context.state)) }
-                        Spacer()
-                        if let iob = context.state.iob { Text(String(format: "IOB %.1f", iob)) }
-                        Text(context.state.date, style: .relative).foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack {
+                            if let d = context.state.delta { Text(delta(d, context.state)) }
+                            Spacer()
+                            if let iob = context.state.iob { Text(String(format: "IOB %.1f", iob)) }
+                            if let cob = context.state.cob { Text(String(format: "COB %.0f", cob)) }
+                            Text(context.state.date, style: .relative).foregroundStyle(.secondary)
+                        }
+                        if context.state.tempBasalRate != nil || context.state.activeProfileName != nil {
+                            HStack {
+                                if let rate = context.state.tempBasalRate { Text(String(format: "Basal %.2f U/h", rate)) }
+                                if let name = context.state.activeProfileName {
+                                    let pct = context.state.activeProfilePercentage ?? 100
+                                    Text(pct == 100 ? name : "\(name) (\(pct)%)")
+                                }
+                                Spacer()
+                            }
+                        }
                     }.font(.caption)
                 }
             } compactLeading: {

@@ -39,6 +39,9 @@ struct GlucoseTimelineProvider: TimelineProvider {
             mgdl: snap.mgdl, trend: snap.trend, delta: snap.delta, date: snap.date,
             minutesAgo: minutesAgo, isStale: minutesAgo >= config.thresholds.staleMinutes,
             iob: snap.iob, cob: snap.cob,
+            tempBasalRate: snap.tempBasalRate,
+            activeProfileName: snap.activeProfileName,
+            activeProfilePercentage: snap.activeProfilePercentage,
             classification: Formatting.classify(mgdl: snap.mgdl, thresholds: config.thresholds),
             units: config.units, state: .data
         )

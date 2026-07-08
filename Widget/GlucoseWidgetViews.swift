@@ -80,6 +80,11 @@ private struct MediumView: View {
             VStack(alignment: .leading, spacing: 4) {
                 if let iob = entry.iob { Text(String(format: "IOB %.1f U", iob)).font(.caption) }
                 if let cob = entry.cob { Text(String(format: "COB %.0f g", cob)).font(.caption) }
+                if let rate = entry.tempBasalRate { Text(String(format: "Basal %.2f U/h", rate)).font(.caption) }
+                if let name = entry.activeProfileName {
+                    let pct = entry.activeProfilePercentage ?? 100
+                    Text(pct == 100 ? name : "\(name) (\(pct)%)").font(.caption).lineLimit(1)
+                }
             }
             .foregroundStyle(.secondary)
         }

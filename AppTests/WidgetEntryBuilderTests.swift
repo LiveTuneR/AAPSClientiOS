@@ -57,6 +57,19 @@ final class WidgetEntryBuilderTests: XCTestCase {
         XCTAssertEqual(entry.cob, 22)
     }
 
+    func test_carriesTempBasalRateFromLoop() {
+        let loop = LoopStatus(
+            iob: 1.5, cob: 22, eventualBgMgdl: nil, tempBasalRate: 0.85,
+            suggestedReason: nil, timestamp: now, predictions: nil,
+            pumpBattery: nil, pumpReservoir: nil, uploaderBattery: nil, reason: nil
+        )
+        let entry = WidgetEntryBuilder.build(
+            readings: [reading(120, agoSec: 60)],
+            loop: loop, config: DisplayConfig(units: .mgdl, thresholds: .defaults), now: now
+        )
+        XCTAssertEqual(entry.tempBasalRate, 0.85)
+    }
+
     func test_classificationUsesThresholds() {
         let entry = WidgetEntryBuilder.build(
             readings: [reading(60, agoSec: 60)],

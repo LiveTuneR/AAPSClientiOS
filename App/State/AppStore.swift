@@ -341,7 +341,10 @@ enum RefreshError: LocalizedError {
             let delta = readings.count >= 2 ? latest.mgdl - readings[1].mgdl : nil
             let snap = GlucoseSnapshot(
                 mgdl: latest.mgdl, trend: latest.trend, delta: delta, date: latest.date,
-                iob: loopStatus?.iob, cob: loopStatus?.cob
+                iob: loopStatus?.iob, cob: loopStatus?.cob,
+                tempBasalRate: loopStatus?.tempBasalRate,
+                activeProfileName: activeProfileName,
+                activeProfilePercentage: activeProfileSwitch?.percentage
             )
             sharedStore.saveSnapshot(snap)
 
@@ -413,7 +416,11 @@ enum RefreshError: LocalizedError {
         return GlucoseActivityAttributes.ContentState(
             mgdl: latest.mgdl, trendRaw: latest.trend.rawValue,
             delta: delta,
-            date: latest.date, iob: loopStatus?.iob, unitsRaw: displayUnits.rawValue
+            date: latest.date, iob: loopStatus?.iob, unitsRaw: displayUnits.rawValue,
+            cob: loopStatus?.cob,
+            tempBasalRate: loopStatus?.tempBasalRate,
+            activeProfileName: activeProfileName,
+            activeProfilePercentage: activeProfileSwitch?.percentage
         )
     }
 
