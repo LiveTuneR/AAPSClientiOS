@@ -23,6 +23,7 @@ final class FixtureNightscoutClient: NightscoutClient {
     /// Simulate a Task cancelled mid-refresh: entries succeed, later stages throw
     /// CancellationError (the real-world trigger for the frozen widget/LA bug).
     var cancelAfterEntries = false
+    var treatmentsOverride: [Treatment]?
     var settingsByIdentifier: [String: String] = [
         NightscoutSettingsIdentifier.cold: "settings_aaps",
         NightscoutSettingsIdentifier.state: "settings_aaps_state",
@@ -41,6 +42,7 @@ final class FixtureNightscoutClient: NightscoutClient {
     func fetchTreatments(since: Date?) async throws -> [Treatment] {
         if cancelAfterEntries { throw CancellationError() }
         if let error = shouldThrow { throw error }
+        if let treatmentsOverride { return treatmentsOverride }
         let data = try loadFixture("treatments")
         return try NsMapping.treatments(from: data)
     }

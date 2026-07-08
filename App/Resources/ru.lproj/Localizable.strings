@@ -85,6 +85,9 @@
 "settings.live_activity_caption" = "Обновляется, пока приложение открыто или обновляется в фоне. Без push-сервера не обновляется, когда приложение полностью закрыто.";
 "settings.glucose_notification" = "Уведомление с последней глюкозой";
 "settings.glucose_notification_caption" = "Оставляет одно заменяемое уведомление с последним значением. Обновляется при работе приложения или разрешённом системой фоновом обновлении.";
+"announcement.title" = "Уведомление от Nightscout";
+"settings.announcement_relay" = "Оповещения мастера";
+"settings.announcement_relay_caption" = "Показывает локальное уведомление, когда мастер публикует announcement в Nightscout (например, предупреждение о низком уровне глюкозы или автоматически сообщённую ошибку). Действует 60 минут с момента создания записи.";
 "notification.glucose_measured" = "Измерено в %@";
 "status.master" = "Мастер";
 "status.pump" = "Помпа";

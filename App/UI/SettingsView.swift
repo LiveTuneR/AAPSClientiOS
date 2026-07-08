@@ -16,6 +16,7 @@ struct SettingsView: View {
     @State private var connectionResult: String?
     @State private var liveActivityOn: Bool
     @State private var glucoseNotificationOn: Bool
+    @State private var announcementRelayOn: Bool
     @State private var eatingSoonTarget: String = ""
     @State private var eatingSoonDuration: String = ""
     @State private var activityTarget: String = ""
@@ -38,6 +39,7 @@ struct SettingsView: View {
         _staleMinutes = State(initialValue: String(t.staleMinutes))
         _liveActivityOn = State(initialValue: store.isLiveActivityEnabled)
         _glucoseNotificationOn = State(initialValue: store.isGlucoseNotificationEnabled)
+        _announcementRelayOn = State(initialValue: store.isAnnouncementRelayEnabled)
         let presets = store.ttPresets
         func fmt(_ mgdl: Int) -> String {
             isMmol ? String(format: "%.1f", Double(mgdl) / glucoseMmolFactor) : String(mgdl)
@@ -173,6 +175,15 @@ struct SettingsView: View {
             } footer: {
                 Text(String(localized: "settings.glucose_notification_caption"))
             }
+
+            Section {
+                Toggle(String(localized: "settings.announcement_relay"), isOn: $announcementRelayOn)
+                    .onChange(of: announcementRelayOn) { on in
+                        store.setAnnouncementRelayEnabled(on)
+                    }
+            } footer: {
+                Text(String(localized: "settings.announcement_relay_caption"))
+            }
         }
         .navigationTitle("settings.title")
         .onAppear { loadSettings() }
@@ -218,6 +229,7 @@ struct SettingsView: View {
         accessToken = (try? keychain.get(.nsAccessToken)) ?? ""
         liveActivityOn = store.isLiveActivityEnabled
         glucoseNotificationOn = store.isGlucoseNotificationEnabled
+        announcementRelayOn = store.isAnnouncementRelayEnabled
     }
 
     private func changeDisplayUnits(to units: GlucoseUnits) {

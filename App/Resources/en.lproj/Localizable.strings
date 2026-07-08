@@ -85,6 +85,9 @@
 "settings.live_activity_caption" = "Updates while the app is open or refreshing in the background. Without a push server it will not update when the app is fully closed.";
 "settings.glucose_notification" = "Latest Glucose Notification";
 "settings.glucose_notification_caption" = "Keeps one replaceable notification with the latest reading. Updates while the app is open or allowed to refresh in the background.";
+"announcement.title" = "Nightscout Announcement";
+"settings.announcement_relay" = "Master Announcements";
+"settings.announcement_relay_caption" = "Shows a local notification when the master device posts a Nightscout announcement (e.g. predicted-low carb suggestion or an auto-reported error), valid for 60 minutes after it was created.";
 "notification.glucose_measured" = "Measured at %@";
 "status.master" = "Master";
 "status.pump" = "Pump";

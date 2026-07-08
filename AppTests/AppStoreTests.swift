@@ -259,6 +259,43 @@ final class AppStoreTests: XCTestCase {
         XCTAssertEqual(store.remoteQuickWizardEntries.first?.name, "Breakfast")
         XCTAssertEqual(store.activeRemoteSceneDisplayName, "School Sport")
     }
+
+    func test_refreshRelaysFreshAnnouncement() async throws {
+        let mockClient = FixtureNightscoutClient()
+        mockClient.treatmentsOverride = [
+            Treatment(
+                id: "ann1", eventType: "Announcement", date: Date(),
+                insulin: nil, carbs: nil, durationMin: nil, enteredBy: nil, notes: "Check pump",
+                targetBottom: nil, targetTop: nil, profileName: nil, percentage: nil,
+                absolute: nil, tempBasalPercent: nil
+            )
+        ]
+        let notifier = MockNotifier()
+        let store = AppStore(client: mockClient, alarmEngine: AlarmEngineLive(), notifier: notifier)
+
+        try await store.refresh()
+
+        XCTAssertEqual(notifier.posted.map(\.body), ["Check pump"])
+    }
+
+    func test_refreshDoesNotReRelaySameAnnouncement() async throws {
+        let mockClient = FixtureNightscoutClient()
+        mockClient.treatmentsOverride = [
+            Treatment(
+                id: "ann1", eventType: "Announcement", date: Date(),
+                insulin: nil, carbs: nil, durationMin: nil, enteredBy: nil, notes: "Check pump",
+                targetBottom: nil, targetTop: nil, profileName: nil, percentage: nil,
+                absolute: nil, tempBasalPercent: nil
+            )
+        ]
+        let notifier = MockNotifier()
+        let store = AppStore(client: mockClient, alarmEngine: AlarmEngineLive(), notifier: notifier)
+
+        try await store.refresh()
+        try await store.refresh()
+
+        XCTAssertEqual(notifier.posted.count, 1)
+    }
 }
 
 private final class UnconfiguredTestClient: NightscoutClient {

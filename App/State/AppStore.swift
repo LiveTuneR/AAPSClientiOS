@@ -39,6 +39,7 @@ enum RefreshError: LocalizedError {
     }
 
     let alarmEngine: AlarmEngine
+    private let notifier: Notifier
     private var _client: NightscoutClient
     private let clientLock = NSLock()
     var client: NightscoutClient {
@@ -52,12 +53,24 @@ enum RefreshError: LocalizedError {
     private var lastNotifiedReadingDate: Date?
     private var lastLiveActivityReadingDate: Date?
     private var lastLiveActivityPushAt: Date?
+    private var lastNotifiedAnnouncementDate: Date?
     static let liveActivityEnabledKey = "liveActivity.enabled"
     static let liveActivityPushInterval: TimeInterval = 5 * 60
     static let glucoseNotificationEnabledKey = "notification.latestGlucose.enabled"
+    static let announcementRelayEnabledKey = "announcementRelay.enabled"
 
     var isGlucoseNotificationEnabled: Bool {
         UserDefaults.standard.bool(forKey: Self.glucoseNotificationEnabledKey)
+    }
+
+    var isAnnouncementRelayEnabled: Bool {
+        let d = UserDefaults.standard
+        if d.object(forKey: Self.announcementRelayEnabledKey) == nil { return true }
+        return d.bool(forKey: Self.announcementRelayEnabledKey)
+    }
+
+    func setAnnouncementRelayEnabled(_ on: Bool) {
+        UserDefaults.standard.set(on, forKey: Self.announcementRelayEnabledKey)
     }
 
     var isLiveActivityEnabled: Bool {
@@ -148,12 +161,14 @@ enum RefreshError: LocalizedError {
         client: NightscoutClient,
         alarmEngine: AlarmEngine,
         sharedStore: SharedStore = SharedStore(),
-        glucoseNotificationPublisher: GlucoseNotificationPublishing = DummyGlucoseNotificationPublisher()
+        glucoseNotificationPublisher: GlucoseNotificationPublishing = DummyGlucoseNotificationPublisher(),
+        notifier: Notifier = UNNotifier()
     ) {
         self._client = client
         self.alarmEngine = alarmEngine
         self.sharedStore = sharedStore
         self.glucoseNotificationPublisher = glucoseNotificationPublisher
+        self.notifier = notifier
         self.thresholds = Self.loadThresholds()
         self.displayUnits = Self.loadDisplayUnits()
         ensureConfigured()
@@ -263,6 +278,7 @@ enum RefreshError: LocalizedError {
         do {
             let t = try await client.fetchTreatments(since: nil)
             treatments = t
+            relayAnnouncementIfNeeded(in: t)
         } catch is CancellationError { return }
         catch { firstError = firstError ?? RefreshError.stage("treatments", error) }
 
@@ -427,6 +443,19 @@ enum RefreshError: LocalizedError {
             activeProfileName: activeProfileName,
             activeProfilePercentage: activeProfileSwitch?.percentage
         )
+    }
+
+    private func relayAnnouncementIfNeeded(in treatments: [Treatment]) {
+        guard isAnnouncementRelayEnabled,
+              let pending = AnnouncementRelay.pendingAnnouncement(in: treatments, lastNotifiedDate: lastNotifiedAnnouncementDate) else {
+            return
+        }
+        notifier.post(
+            title: String(localized: "announcement.title"),
+            body: pending.notes ?? "",
+            identifier: "ns.announcement.\(pending.id)"
+        )
+        lastNotifiedAnnouncementDate = pending.date
     }
 
     private func rememberRemoteConfigError(_ error: Error) {
