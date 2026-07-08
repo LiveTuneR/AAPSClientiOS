@@ -4,6 +4,8 @@ struct StatusCardView: View {
     @ObservedObject var store: AppStore
     let units: GlucoseUnits
     let remoteCapabilities: NsRemoteCapabilities?
+    @Binding var statusMessage: String?
+    @Binding var statusIsError: Bool
     @Binding var showLoopMenu: Bool
     @Binding var showEventSheet: Bool
     @Binding var showProfileSwitch: Bool
@@ -222,7 +224,11 @@ struct StatusCardView: View {
             .contentShape(Circle())
             .onTapGesture {
                 let actionState = remoteActionState(for: .runningMode, capabilities: remoteCapabilities)
-                guard actionState.isEnabled else { return }
+                guard actionState.isEnabled else {
+                    statusMessage = actionState.reason ?? String(localized: "remote.config_unavailable")
+                    statusIsError = true
+                    return
+                }
                 showLoopMenu = true
             }
             Spacer()

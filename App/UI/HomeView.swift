@@ -38,7 +38,16 @@ struct HomeView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 12) {
-                StatusCardView(store: store, units: units, remoteCapabilities: store.remoteCapabilities, showLoopMenu: $showLoopMenu, showEventSheet: $showEventSheet, showProfileSwitch: $showProfileSwitch)
+                StatusCardView(
+                    store: store,
+                    units: units,
+                    remoteCapabilities: store.remoteCapabilities,
+                    statusMessage: $statusMessage,
+                    statusIsError: $statusIsError,
+                    showLoopMenu: $showLoopMenu,
+                    showEventSheet: $showEventSheet,
+                    showProfileSwitch: $showProfileSwitch
+                )
                 if let err = refreshError {
                     Text(err).font(.caption2).foregroundColor(.red).padding(6).background(Color.red.opacity(0.1)).cornerRadius(6)
                 }
