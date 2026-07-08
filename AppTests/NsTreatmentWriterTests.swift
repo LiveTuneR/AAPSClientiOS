@@ -85,6 +85,14 @@ final class NsTreatmentWriterTests: XCTestCase {
         XCTAssertEqual(p["app"] as? String, "AAPSClient-iOS")
     }
 
+    func test_disconnectPumpPayload() {
+        let p = NsTreatmentWriterLive.buildLoopMode("DISCONNECTED_PUMP", durationMin: 30)
+        XCTAssertEqual(p["eventType"] as? String, "OpenAPS Offline")
+        XCTAssertEqual(p["mode"] as? String, "DISCONNECTED_PUMP")
+        XCTAssertEqual(p["duration"] as? Int, 30)
+        XCTAssertEqual(p["app"] as? String, "AAPSClient-iOS")
+    }
+
     func test_profileSwitchPayloadWithEditedProfileJson() async throws {
         let data = try loadFixture("profile")
         let store = try NsMapping.profileStore(from: data)

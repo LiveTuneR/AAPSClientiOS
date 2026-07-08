@@ -69,6 +69,12 @@ struct HomeView: View {
             Button("Suspend 30m") { setLoop("SUSPENDED_BY_USER", 30) }
             Button("Suspend 1h")  { setLoop("SUSPENDED_BY_USER", 60) }
             Button("Suspend 2h")  { setLoop("SUSPENDED_BY_USER", 120) }
+            Button("Disconnect Pump 15m") { setLoop("DISCONNECTED_PUMP", 15) }
+            Button("Disconnect Pump 30m") { setLoop("DISCONNECTED_PUMP", 30) }
+            Button("Disconnect Pump 1h")  { setLoop("DISCONNECTED_PUMP", 60) }
+            Button("Disconnect Pump 2h")  { setLoop("DISCONNECTED_PUMP", 120) }
+            Button("Disconnect Pump 3h")  { setLoop("DISCONNECTED_PUMP", 180) }
+            Button("Reconnect") { setLoop("CLOSED_LOOP", 1440) }
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("Requires NS Accept Running Mode on master device")
