@@ -19,12 +19,19 @@ protocol NightscoutClient: Sendable {
     /// not the extension default below.
     func fetchEntries(sinceDays days: Int) async throws -> [GlucoseReading]
     func fetchDeviceStatusHistory(since: Date) async throws -> [DeviceStatusEntry]
+    /// Treatments covering `since` to now, paginated by the treatment `date` field (not
+    /// `srvModified`). MUST be a protocol requirement — see `fetchEntries(sinceDays:)` above
+    /// for why an extension-only default would silently shadow the live client's real paging.
+    func fetchTreatmentsHistory(since: Date) async throws -> [Treatment]
 }
 
 extension NightscoutClient {
     func fetchCareEvents() async throws -> [Treatment] { try await fetchTreatments(since: nil) }
     func fetchEntries(sinceDays days: Int) async throws -> [GlucoseReading] { try await fetchEntries(limit: days * 320) }
     func fetchDeviceStatusHistory(since: Date) async throws -> [DeviceStatusEntry] { [] }
+    func fetchTreatmentsHistory(since: Date) async throws -> [Treatment] {
+        try await fetchTreatments(since: nil).filter { $0.date >= since }
+    }
     func fetchRunningConfigCold() async throws -> NsRunningConfigCold? {
         guard let document = try await fetchSettings(identifier: NightscoutSettingsIdentifier.cold) else { return nil }
         return try NsMapping.runningConfigCold(from: document)

@@ -102,3 +102,48 @@ extension StatisticsCompute {
         }
     }
 }
+
+struct DailyDose: Equatable, Identifiable {
+    let day: Date
+    let basalUnits: Double
+    let bolusUnits: Double
+    var totalUnits: Double { basalUnits + bolusUnits }
+    var id: Date { day }
+}
+
+extension StatisticsCompute {
+    static func dailyDoses(
+        treatments: [Treatment],
+        basal: [BasalEntry],
+        windowStart: Date,
+        windowEnd: Date,
+        timeZone: TimeZone = .current
+    ) -> [DailyDose] {
+        guard windowStart < windowEnd else { return [] }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+
+        var days: [Date] = []
+        var day = calendar.startOfDay(for: windowStart)
+        while day < windowEnd {
+            days.append(day)
+            guard let next = calendar.date(byAdding: .day, value: 1, to: day) else { break }
+            day = next
+        }
+
+        let tempBasalTreatments = treatments.filter { $0.eventType == "Temp Basal" }
+
+        return days.map { dayStart in
+            let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart.addingTimeInterval(86400)
+            let clippedStart = max(dayStart, windowStart)
+            let clippedEnd = min(dayEnd, windowEnd)
+            let scheduled = basalSegments(basal: basal, windowStart: clippedStart, windowEnd: clippedEnd, timeZone: timeZone)
+            let actual = actualBasalSegments(scheduled: scheduled, tempBasal: tempBasalTreatments, windowStart: clippedStart, windowEnd: clippedEnd)
+            let basalUnits = actual.reduce(0.0) { $0 + $1.rate * $1.end.timeIntervalSince($1.start) / 3600 }
+            let bolusUnits = treatments
+                .filter { ($0.insulin ?? 0) > 0 && $0.date >= clippedStart && $0.date < clippedEnd }
+                .reduce(0.0) { $0 + ($1.insulin ?? 0) }
+            return DailyDose(day: dayStart, basalUnits: basalUnits, bolusUnits: bolusUnits)
+        }
+    }
+}

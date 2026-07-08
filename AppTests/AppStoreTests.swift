@@ -83,6 +83,15 @@ final class AppStoreTests: XCTestCase {
         XCTAssertEqual(store.treatments.count, 4)
     }
 
+    func test_fetchTreatmentHistoryDelegatesToClient() async throws {
+        let mockClient = FixtureNightscoutClient()
+        let store = AppStore(client: mockClient, alarmEngine: AlarmEngineLive())
+
+        let treatments = try await store.fetchTreatmentHistory(days: 7)
+
+        XCTAssertEqual(treatments.count, 4)
+    }
+
     func test_connectionLostAlarmOnNetworkError() async throws {
         let mockClient = FixtureNightscoutClient()
         let notifier = MockNotifier()
@@ -266,4 +275,5 @@ private final class UnconfiguredTestClient: NightscoutClient {
     func fetchCareEvents() async throws -> [Treatment] { throw NsError.badURL }
     func fetchEntries(sinceDays days: Int) async throws -> [GlucoseReading] { throw NsError.badURL }
     func fetchDeviceStatusHistory(since: Date) async throws -> [DeviceStatusEntry] { throw NsError.badURL }
+    func fetchTreatmentsHistory(since: Date) async throws -> [Treatment] { throw NsError.badURL }
 }

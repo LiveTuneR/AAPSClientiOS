@@ -139,6 +139,23 @@ final class NightscoutReadTests: XCTestCase {
         XCTAssertTrue(cold?.remoteCapabilities.canRemoteProfileSwitch == true)
     }
 
+    func test_fetchTreatmentsHistoryURL() async throws {
+        let transport = MockAuthTransport()
+        transport.responseData = #"{"token":"jwt","iat":1,"exp":99999}"#.data(using: .utf8)!
+        let client = NightscoutClientLive(baseURL: testBaseURL, accessToken: "t", transport: transport)
+        try await client.authorize()
+
+        transport.responseData = try loadFixture("treatments")
+        let since = Date(timeIntervalSince1970: 1_718_571_600)
+        let treatments = try await client.fetchTreatmentsHistory(since: since)
+
+        let url = transport.lastRequest?.url?.absoluteString ?? ""
+        XCTAssertTrue(url.contains("api/v3/treatments"))
+        XCTAssertTrue(url.contains("sort$desc=date"))
+        XCTAssertTrue(url.contains("date$gt=1718571600000"))
+        XCTAssertEqual(treatments.count, 4)
+    }
+
     func test_fetchRunningConfigHotUsesStateSettingsEndpoint() async throws {
         let transport = MockAuthTransport()
         transport.responseData = #"{"token":"jwt","iat":1,"exp":99999}"#.data(using: .utf8)!

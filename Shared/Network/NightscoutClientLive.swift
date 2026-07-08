@@ -123,6 +123,26 @@ actor NightscoutClientLive: NightscoutClient {
         return try NsMapping.deviceStatusHistory(from: data)
     }
 
+    func fetchTreatmentsHistory(since: Date) async throws -> [Treatment] {
+        let cutoffMs = Int64(since.timeIntervalSince1970 * 1000)
+        let pageSize = 500
+        var all: [Treatment] = []
+        var seen = Set<String>()
+        var skip = 0
+        for _ in 0..<40 {
+            let path = "api/v3/treatments?sort$desc=date&limit=\(pageSize)&skip=\(skip)&date$gt=\(cutoffMs)"
+            let data = try await get(path)
+            let page = try NsMapping.treatments(from: data)
+            if page.isEmpty { break }
+            for treatment in page where seen.insert(treatment.id).inserted {
+                all.append(treatment)
+            }
+            if page.count < pageSize { break }
+            skip += page.count
+        }
+        return all
+    }
+
     func fetchCareEvents() async throws -> [Treatment] {
         let types = ["Site Change", "Sensor Change", "Sensor Start", "Insulin Change", "Pump Battery Change", "Profile Switch"]
         let inValue = types.joined(separator: "|")

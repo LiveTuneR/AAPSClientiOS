@@ -9,8 +9,29 @@ struct StatisticsView: View {
     @State private var loading = false
     @State private var cache = PeriodCache<Int, [GlucoseReading]>(ttl: 60)
     @State private var loadError: String?
+    @State private var doseTreatments: [Treatment] = []
+    @State private var doseLoading = false
+    @State private var doseCache = PeriodCache<Int, [Treatment]>(ttl: 60)
+    @State private var doseLoadError: String?
+    // Cached, not a computed property: `dailyDoses` is O(days × treatments) and was measured
+    // taking multi-second real wall time for dense multi-day treatment histories. It used to be
+    // a computed property read from 4 separate places in `body` (the Chart plus 3 average rows),
+    // redoing the full calculation on every access — recompute once here instead, in `recomputeDoses()`.
+    @State private var doses: [DailyDose] = []
 
     private var units: GlucoseUnits { store.displayUnits }
+
+    private var averageBasalPerDay: Double {
+        doses.isEmpty ? 0 : doses.reduce(0) { $0 + $1.basalUnits } / Double(doses.count)
+    }
+
+    private var averageBolusPerDay: Double {
+        doses.isEmpty ? 0 : doses.reduce(0) { $0 + $1.bolusUnits } / Double(doses.count)
+    }
+
+    private var averageTotalDose: Double {
+        doses.isEmpty ? 0 : doses.reduce(0) { $0 + $1.totalUnits } / Double(doses.count)
+    }
 
     private var stats: GlucoseStats {
         StatisticsCompute.stats(readings: loaded, thresholds: store.thresholds)
@@ -68,9 +89,34 @@ struct StatisticsView: View {
                 metricRow("CV", String(format: "%.1f%%", stats.cvPercent))
                 metricRow("SD", Formatting.format(Int(stats.sdMgdl.rounded()), units: units))
             }
+
+            Section("Total Daily Dose") {
+                if doseLoading && doseTreatments.isEmpty {
+                    ProgressView().frame(maxWidth: .infinity)
+                } else if let doseLoadError {
+                    Text(doseLoadError)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    Chart(doses) { d in
+                        BarMark(x: .value("Day", d.day, unit: .day), y: .value("Units", d.basalUnits))
+                            .foregroundStyle(.blue)
+                        BarMark(x: .value("Day", d.day, unit: .day), y: .value("Units", d.bolusUnits))
+                            .foregroundStyle(.orange)
+                    }
+                    .frame(height: 160)
+                    metricRow("Avg Total/Day", String(format: "%.1f U", averageTotalDose))
+                    metricRow("Avg Basal/Day", String(format: "%.1f U", averageBasalPerDay))
+                    metricRow("Avg Bolus/Day", String(format: "%.1f U", averageBolusPerDay))
+                }
+            }
         }
         .navigationTitle("Statistics")
-        .task(id: period) { await load() }
+        .task(id: period) {
+            await load()
+            await loadDoses()
+        }
     }
 
     private func load() async {
@@ -89,6 +135,37 @@ struct StatisticsView: View {
         } catch {
             loadError = error.localizedDescription
         }
+    }
+
+    private func loadDoses() async {
+        if let cached = doseCache.value(for: period, newerThan: store.lastRefresh) {
+            doseTreatments = cached
+            doseLoadError = nil
+            recomputeDoses()
+            return
+        }
+        doseLoading = true
+        defer { doseLoading = false }
+        do {
+            let data = try await store.fetchTreatmentHistory(days: period)
+            doseTreatments = data
+            doseCache.store(data, for: period)
+            doseLoadError = nil
+            recomputeDoses()
+        } catch {
+            doseLoadError = error.localizedDescription
+        }
+    }
+
+    private func recomputeDoses() {
+        let now = Date()
+        let start = Calendar.current.date(byAdding: .day, value: -period, to: now) ?? now
+        doses = StatisticsCompute.dailyDoses(
+            treatments: doseTreatments,
+            basal: store.profile?.basal ?? [],
+            windowStart: start,
+            windowEnd: now
+        )
     }
 
     private var glucoseChart: some View {

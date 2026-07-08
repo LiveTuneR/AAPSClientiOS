@@ -61,12 +61,35 @@ func actualBasalSegments(
     for o in overrides { cuts.insert(o.start.timeIntervalSince1970); cuts.insert(o.end.timeIntervalSince1970) }
     let sortedCuts = cuts.sorted().map { Date(timeIntervalSince1970: $0) }.filter { $0 >= windowStart && $0 <= windowEnd }
 
+    // `overrides` is built by walking `sortedTemps` in ascending date order above, with each
+    // predecessor's `end` clamped to the next override's `start` — so it is guaranteed sorted
+    // by `start` AND non-overlapping. That lets us binary-search for the (at most one) override
+    // containing `mid` in O(log n) instead of a linear `.first(where:)` scan. This matters once
+    // there are thousands of overrides (e.g. a multi-day window over dense every-5-min AAPS temp
+    // basal history): the old linear scan made this function O(cuts × overrides), which measured
+    // at ~2.5s for a single 30-day/8640-override call — the linear scan alone was ~150M comparisons.
+    func activeOverride(at mid: Date) -> Override? {
+        var lo = 0, hi = overrides.count - 1
+        var candidate: Override?
+        while lo <= hi {
+            let idx = (lo + hi) / 2
+            if overrides[idx].start <= mid {
+                candidate = overrides[idx]
+                lo = idx + 1
+            } else {
+                hi = idx - 1
+            }
+        }
+        guard let candidate, mid < candidate.end else { return nil }
+        return candidate
+    }
+
     var result: [ActualBasalSegment] = []
     for i in 0..<max(sortedCuts.count - 1, 0) {
         let s = sortedCuts[i], e = sortedCuts[i + 1]
         guard s < e else { continue }
         let mid = s.addingTimeInterval(e.timeIntervalSince(s) / 2)
-        if let active = overrides.first(where: { $0.start <= mid && mid < $0.end }) {
+        if let active = activeOverride(at: mid) {
             result.append(ActualBasalSegment(start: s, end: e, rate: active.rate, isTemp: true))
         } else {
             result.append(ActualBasalSegment(start: s, end: e, rate: scheduledRate(at: mid), isTemp: false))

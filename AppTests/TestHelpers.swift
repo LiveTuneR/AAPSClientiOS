@@ -83,6 +83,12 @@ final class FixtureNightscoutClient: NightscoutClient {
         return try NsMapping.deviceStatusHistory(from: data)
     }
 
+    func fetchTreatmentsHistory(since: Date) async throws -> [Treatment] {
+        if let error = shouldThrow { throw error }
+        let data = try loadFixture("treatments")
+        return try NsMapping.treatments(from: data)
+    }
+
     func postTreatment(_ payload: [String: Any]) async throws {
         if let error = shouldThrow { throw error }
         postedPayloads.append(payload)

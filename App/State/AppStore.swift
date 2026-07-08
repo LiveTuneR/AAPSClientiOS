@@ -139,6 +139,11 @@ enum RefreshError: LocalizedError {
         return try await client.fetchEntries(sinceDays: days)
     }
 
+    func fetchTreatmentHistory(days: Int) async throws -> [Treatment] {
+        ensureConfigured()
+        return try await client.fetchTreatmentsHistory(since: Date().addingTimeInterval(-Double(days) * 86400))
+    }
+
     init(
         client: NightscoutClient,
         alarmEngine: AlarmEngine,
