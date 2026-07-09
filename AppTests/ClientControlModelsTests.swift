@@ -45,4 +45,45 @@ final class ClientControlModelsTests: XCTestCase {
         XCTAssertEqual(ack.status, .pending)
         XCTAssertNil(ack.reason)
     }
+
+    func test_bolusPreviewDecodesFromNsJson() throws {
+        let json = #"""
+        {"bolusId":123,"lines":[{"role":"NORMAL","text":"Scene: Exercise"}],"advisorApplies":false,"advisorLines":[]}
+        """#
+        let preview = try JSONDecoder().decode(BolusPreview.self, from: Data(json.utf8))
+        XCTAssertEqual(preview.bolusId, 123)
+        XCTAssertEqual(preview.lines.first?.role, "NORMAL")
+        XCTAssertEqual(preview.lines.first?.text, "Scene: Exercise")
+        XCTAssertFalse(preview.advisorApplies)
+        XCTAssertNil(preview.wizardDetail)
+    }
+
+    func test_bolusPreviewDecodesWizardDetailWhenPresent() throws {
+        let json = #"""
+        {"bolusId":1,"lines":[],"advisorApplies":false,"advisorLines":[],"wizardDetail":{
+            "totalInsulin":2.5,"carbs":40,"insulinFromBG":0.5,"insulinFromTrend":0,"insulinFromCOB":0.3,
+            "insulinFromCarbs":1.7,"insulinFromBolusIOB":0,"insulinFromBasalIOB":0,"includeBolusIOB":true,
+            "includeBasalIOB":true,"percentageCorrection":100,"cob":10,"tempTargetLabel":null,"ic":8,"sens":50
+        }}
+        """#
+        let preview = try JSONDecoder().decode(BolusPreview.self, from: Data(json.utf8))
+        XCTAssertEqual(preview.wizardDetail?.totalInsulin, 2.5)
+        XCTAssertEqual(preview.wizardDetail?.carbs, 40)
+    }
+
+    func test_wizardPrepareEncodesAllFields() throws {
+        let msg = ClientControlMessage.WizardPrepare(
+            bg: 120, carbs: 40, percentage: 100, directCorrection: 0, carbTime: 0,
+            useBg: true, useCob: true, useIob: true, useTt: true, useTrend: false,
+            alarm: false, notes: "", eCarbsGrams: 0, eCarbsDelayMinutes: 0, eCarbsDurationHours: 0,
+            profileName: nil
+        )
+        let data = try JSONEncoder().encode(msg)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        XCTAssertEqual(json["bg"] as? Double, 120)
+        XCTAssertEqual(json["carbs"] as? Int, 40)
+        XCTAssertEqual(json["useBg"] as? Bool, true)
+        XCTAssertEqual(json["useTrend"] as? Bool, false)
+        XCTAssertNil(json["profileName"] as? String)
+    }
 }
