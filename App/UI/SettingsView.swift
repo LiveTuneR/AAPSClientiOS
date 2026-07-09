@@ -12,6 +12,18 @@ struct SettingsView: View {
     @State private var high: String
     @State private var urgentHigh: String
     @State private var staleMinutes: String
+    @State private var cageWarn: String
+    @State private var cageCritical: String
+    @State private var iageWarn: String
+    @State private var iageCritical: String
+    @State private var sageWarn: String
+    @State private var sageCritical: String
+    @State private var bageWarn: String
+    @State private var bageCritical: String
+    @State private var reservoirWarn: String
+    @State private var reservoirCritical: String
+    @State private var pumpBattWarn: String
+    @State private var pumpBattCritical: String
     @State private var testingConnection = false
     @State private var connectionResult: String?
     @State private var liveActivityOn: Bool
@@ -50,6 +62,19 @@ struct SettingsView: View {
         _activityDuration = State(initialValue: String(presets[.activity]?.durationMin ?? TtReason.activity.defaultDurationMin))
         _hypoTarget = State(initialValue: fmt(presets[.hypo]?.targetMgdl ?? TtReason.hypo.defaultTargetMgdl))
         _hypoDuration = State(initialValue: String(presets[.hypo]?.durationMin ?? TtReason.hypo.defaultDurationMin))
+        let ct = store.consumableThresholds
+        _cageWarn = State(initialValue: String(ct.cageWarnHours))
+        _cageCritical = State(initialValue: String(ct.cageCriticalHours))
+        _iageWarn = State(initialValue: String(ct.iageWarnHours))
+        _iageCritical = State(initialValue: String(ct.iageCriticalHours))
+        _sageWarn = State(initialValue: String(ct.sageWarnHours))
+        _sageCritical = State(initialValue: String(ct.sageCriticalHours))
+        _bageWarn = State(initialValue: String(ct.bageWarnHours))
+        _bageCritical = State(initialValue: String(ct.bageCriticalHours))
+        _reservoirWarn = State(initialValue: String(ct.reservoirWarnUnits))
+        _reservoirCritical = State(initialValue: String(ct.reservoirCriticalUnits))
+        _pumpBattWarn = State(initialValue: String(ct.pumpBattWarnPercent))
+        _pumpBattCritical = State(initialValue: String(ct.pumpBattCriticalPercent))
     }
 
     var body: some View {
@@ -103,6 +128,45 @@ struct SettingsView: View {
                 HStack {
                     TextField("settings.stale_min", text: $staleMinutes).keyboardType(.numberPad)
                     Text("min").foregroundColor(.secondary)
+                }
+            }
+
+            Section("settings.consumable_warnings") {
+                HStack {
+                    TextField("settings.cage_warn", text: $cageWarn).keyboardType(.numberPad)
+                    Text("h").foregroundColor(.secondary)
+                    TextField("settings.cage_critical", text: $cageCritical).keyboardType(.numberPad)
+                    Text("h").foregroundColor(.secondary)
+                }
+                HStack {
+                    TextField("settings.iage_warn", text: $iageWarn).keyboardType(.numberPad)
+                    Text("h").foregroundColor(.secondary)
+                    TextField("settings.iage_critical", text: $iageCritical).keyboardType(.numberPad)
+                    Text("h").foregroundColor(.secondary)
+                }
+                HStack {
+                    TextField("settings.sage_warn", text: $sageWarn).keyboardType(.numberPad)
+                    Text("h").foregroundColor(.secondary)
+                    TextField("settings.sage_critical", text: $sageCritical).keyboardType(.numberPad)
+                    Text("h").foregroundColor(.secondary)
+                }
+                HStack {
+                    TextField("settings.bage_warn", text: $bageWarn).keyboardType(.numberPad)
+                    Text("h").foregroundColor(.secondary)
+                    TextField("settings.bage_critical", text: $bageCritical).keyboardType(.numberPad)
+                    Text("h").foregroundColor(.secondary)
+                }
+                HStack {
+                    TextField("settings.reservoir_warn", text: $reservoirWarn).keyboardType(.numberPad)
+                    Text("U").foregroundColor(.secondary)
+                    TextField("settings.reservoir_critical", text: $reservoirCritical).keyboardType(.numberPad)
+                    Text("U").foregroundColor(.secondary)
+                }
+                HStack {
+                    TextField("settings.pump_batt_warn", text: $pumpBattWarn).keyboardType(.numberPad)
+                    Text("%").foregroundColor(.secondary)
+                    TextField("settings.pump_batt_critical", text: $pumpBattCritical).keyboardType(.numberPad)
+                    Text("%").foregroundColor(.secondary)
                 }
             }
 
@@ -187,7 +251,7 @@ struct SettingsView: View {
         }
         .navigationTitle("settings.title")
         .onAppear { loadSettings() }
-        .onDisappear { saveThresholds(); saveTtPresets() }
+        .onDisappear { saveThresholds(); saveTtPresets(); saveConsumableThresholds() }
     }
 
     private func displayGlucose(_ mgdl: Int) -> String {
@@ -269,6 +333,24 @@ struct SettingsView: View {
             urgentHigh: uhiVal,
             staleMinutes: staleVal
         ))
+    }
+
+    private func saveConsumableThresholds() {
+        let d = ConsumableThresholds(
+            cageWarnHours: Int(cageWarn) ?? ConsumableThresholds.defaults.cageWarnHours,
+            cageCriticalHours: Int(cageCritical) ?? ConsumableThresholds.defaults.cageCriticalHours,
+            iageWarnHours: Int(iageWarn) ?? ConsumableThresholds.defaults.iageWarnHours,
+            iageCriticalHours: Int(iageCritical) ?? ConsumableThresholds.defaults.iageCriticalHours,
+            sageWarnHours: Int(sageWarn) ?? ConsumableThresholds.defaults.sageWarnHours,
+            sageCriticalHours: Int(sageCritical) ?? ConsumableThresholds.defaults.sageCriticalHours,
+            bageWarnHours: Int(bageWarn) ?? ConsumableThresholds.defaults.bageWarnHours,
+            bageCriticalHours: Int(bageCritical) ?? ConsumableThresholds.defaults.bageCriticalHours,
+            reservoirWarnUnits: Int(reservoirWarn) ?? ConsumableThresholds.defaults.reservoirWarnUnits,
+            reservoirCriticalUnits: Int(reservoirCritical) ?? ConsumableThresholds.defaults.reservoirCriticalUnits,
+            pumpBattWarnPercent: Int(pumpBattWarn) ?? ConsumableThresholds.defaults.pumpBattWarnPercent,
+            pumpBattCriticalPercent: Int(pumpBattCritical) ?? ConsumableThresholds.defaults.pumpBattCriticalPercent
+        )
+        store.updateConsumableThresholds(d)
     }
 
     private func saveTtPresets() {

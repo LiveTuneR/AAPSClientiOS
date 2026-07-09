@@ -375,6 +375,30 @@ struct AlarmThresholds: Equatable, Codable {
     )
 }
 
+struct ConsumableThresholds: Equatable, Codable {
+    let cageWarnHours: Int
+    let cageCriticalHours: Int
+    let iageWarnHours: Int
+    let iageCriticalHours: Int
+    let sageWarnHours: Int
+    let sageCriticalHours: Int
+    let bageWarnHours: Int
+    let bageCriticalHours: Int
+    let reservoirWarnUnits: Int
+    let reservoirCriticalUnits: Int
+    let pumpBattWarnPercent: Int
+    let pumpBattCriticalPercent: Int
+
+    static let defaults = ConsumableThresholds(
+        cageWarnHours: 48, cageCriticalHours: 72,
+        iageWarnHours: 72, iageCriticalHours: 144,
+        sageWarnHours: 216, sageCriticalHours: 240,
+        bageWarnHours: 216, bageCriticalHours: 240,
+        reservoirWarnUnits: 80, reservoirCriticalUnits: 10,
+        pumpBattWarnPercent: 51, pumpBattCriticalPercent: 26
+    )
+}
+
 enum AlarmType: Equatable, Hashable {
     case urgentLow, low, high, urgentHigh, noData, connectionLost
 }

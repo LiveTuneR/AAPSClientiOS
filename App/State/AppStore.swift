@@ -20,6 +20,7 @@ enum RefreshError: LocalizedError {
     @Published var profileStore: NsProfileStore? = nil
     @Published var connectionLost = false
     @Published var thresholds: AlarmThresholds
+    @Published var consumableThresholds: ConsumableThresholds
     @Published var displayUnits: GlucoseUnits = .mgdl
     @Published var careEvents: [Treatment] = []
     @Published var deviceStatusHistory: [DeviceStatusEntry] = []
@@ -170,6 +171,7 @@ enum RefreshError: LocalizedError {
         self.glucoseNotificationPublisher = glucoseNotificationPublisher
         self.notifier = notifier
         self.thresholds = Self.loadThresholds()
+        self.consumableThresholds = Self.loadConsumableThresholds()
         self.displayUnits = Self.loadDisplayUnits()
         ensureConfigured()
     }
@@ -231,6 +233,42 @@ enum RefreshError: LocalizedError {
             high: d.integer(forKey: "threshold.high"),
             urgentHigh: d.integer(forKey: "threshold.urgentHigh"),
             staleMinutes: d.integer(forKey: "threshold.staleMinutes")
+        )
+    }
+
+    func updateConsumableThresholds(_ t: ConsumableThresholds) {
+        consumableThresholds = t
+        let d = UserDefaults.standard
+        d.set(t.cageWarnHours, forKey: "consumable.cageWarnHours")
+        d.set(t.cageCriticalHours, forKey: "consumable.cageCriticalHours")
+        d.set(t.iageWarnHours, forKey: "consumable.iageWarnHours")
+        d.set(t.iageCriticalHours, forKey: "consumable.iageCriticalHours")
+        d.set(t.sageWarnHours, forKey: "consumable.sageWarnHours")
+        d.set(t.sageCriticalHours, forKey: "consumable.sageCriticalHours")
+        d.set(t.bageWarnHours, forKey: "consumable.bageWarnHours")
+        d.set(t.bageCriticalHours, forKey: "consumable.bageCriticalHours")
+        d.set(t.reservoirWarnUnits, forKey: "consumable.reservoirWarnUnits")
+        d.set(t.reservoirCriticalUnits, forKey: "consumable.reservoirCriticalUnits")
+        d.set(t.pumpBattWarnPercent, forKey: "consumable.pumpBattWarnPercent")
+        d.set(t.pumpBattCriticalPercent, forKey: "consumable.pumpBattCriticalPercent")
+    }
+
+    private static func loadConsumableThresholds() -> ConsumableThresholds {
+        let d = UserDefaults.standard
+        if d.object(forKey: "consumable.cageWarnHours") == nil { return .defaults }
+        return ConsumableThresholds(
+            cageWarnHours: d.integer(forKey: "consumable.cageWarnHours"),
+            cageCriticalHours: d.integer(forKey: "consumable.cageCriticalHours"),
+            iageWarnHours: d.integer(forKey: "consumable.iageWarnHours"),
+            iageCriticalHours: d.integer(forKey: "consumable.iageCriticalHours"),
+            sageWarnHours: d.integer(forKey: "consumable.sageWarnHours"),
+            sageCriticalHours: d.integer(forKey: "consumable.sageCriticalHours"),
+            bageWarnHours: d.integer(forKey: "consumable.bageWarnHours"),
+            bageCriticalHours: d.integer(forKey: "consumable.bageCriticalHours"),
+            reservoirWarnUnits: d.integer(forKey: "consumable.reservoirWarnUnits"),
+            reservoirCriticalUnits: d.integer(forKey: "consumable.reservoirCriticalUnits"),
+            pumpBattWarnPercent: d.integer(forKey: "consumable.pumpBattWarnPercent"),
+            pumpBattCriticalPercent: d.integer(forKey: "consumable.pumpBattCriticalPercent")
         )
     }
 
@@ -334,6 +372,15 @@ enum RefreshError: LocalizedError {
                thresholds: thresholds
            ), alarm != .connectionLost {
             alarmEngine.schedule(alarm)
+        }
+
+        if let minPredBg = loopStatus?.reason?.minPredBg,
+           let predictedAlarm = alarmEngine.evaluatePredictedLow(
+               minPredBgMgdl: minPredBg,
+               thresholdMgdl: thresholds.low,
+               now: Date()
+           ) {
+            alarmEngine.schedule(predictedAlarm)
         }
 
         // Snapshot mirroring runs via the `defer` above on every exit path.

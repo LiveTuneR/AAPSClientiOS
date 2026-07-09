@@ -296,6 +296,67 @@ final class AppStoreTests: XCTestCase {
 
         XCTAssertEqual(notifier.posted.count, 1)
     }
+
+    func test_consumableThresholdsPersistInUserDefaults() async throws {
+        let mockClient = FixtureNightscoutClient()
+        let store = AppStore(client: mockClient, alarmEngine: AlarmEngineLive())
+
+        let custom = ConsumableThresholds(
+            cageWarnHours: 40, cageCriticalHours: 60,
+            iageWarnHours: 60, iageCriticalHours: 120,
+            sageWarnHours: 200, sageCriticalHours: 220,
+            bageWarnHours: 200, bageCriticalHours: 220,
+            reservoirWarnUnits: 50, reservoirCriticalUnits: 5,
+            pumpBattWarnPercent: 40, pumpBattCriticalPercent: 20
+        )
+        store.updateConsumableThresholds(custom)
+
+        let d = UserDefaults.standard
+        XCTAssertEqual(d.integer(forKey: "consumable.cageWarnHours"), 40)
+        XCTAssertEqual(d.integer(forKey: "consumable.reservoirCriticalUnits"), 5)
+        XCTAssertEqual(store.consumableThresholds, custom)
+    }
+
+    func test_consumableThresholdsDefaultWhenNotSet() {
+        UserDefaults.standard.removeObject(forKey: "consumable.cageWarnHours")
+        let mockClient = FixtureNightscoutClient()
+        let store = AppStore(client: mockClient, alarmEngine: AlarmEngineLive())
+        XCTAssertEqual(store.consumableThresholds, .defaults)
+    }
+
+    func test_refreshSchedulesPredictedLowAlarm() async throws {
+        let mockClient = FixtureNightscoutClient()
+        mockClient.loopStatusOverride = LoopStatus(
+            iob: 1.0, cob: 5, eventualBgMgdl: 90, tempBasalRate: 0.5,
+            suggestedReason: nil, timestamp: Date(), predictions: nil,
+            pumpBattery: 80, pumpReservoir: 100,
+            uploaderBattery: 90,
+            reason: LoopReason(isfMgdl: nil, cr: nil, targetMgdl: nil, tdd: nil, deviation: nil, bgi: nil, minPredBg: 55, iobPredBg: nil, cobPredBg: nil)
+        )
+        let notifier = MockNotifier()
+        let store = AppStore(client: mockClient, alarmEngine: AlarmEngineLive(notifier: notifier))
+
+        try await store.refresh()
+
+        XCTAssertTrue(notifier.posted.map(\.identifier).contains("alarm.predictedLow"))
+    }
+
+    func test_refreshDoesNotScheduleWhenPredictionAboveThreshold() async throws {
+        let mockClient = FixtureNightscoutClient()
+        mockClient.loopStatusOverride = LoopStatus(
+            iob: 1.0, cob: 5, eventualBgMgdl: 120, tempBasalRate: 0.5,
+            suggestedReason: nil, timestamp: Date(), predictions: nil,
+            pumpBattery: 80, pumpReservoir: 100,
+            uploaderBattery: 90,
+            reason: LoopReason(isfMgdl: nil, cr: nil, targetMgdl: nil, tdd: nil, deviation: nil, bgi: nil, minPredBg: 130, iobPredBg: nil, cobPredBg: nil)
+        )
+        let notifier = MockNotifier()
+        let store = AppStore(client: mockClient, alarmEngine: AlarmEngineLive(notifier: notifier))
+
+        try await store.refresh()
+
+        XCTAssertFalse(notifier.posted.map(\.identifier).contains("alarm.predictedLow"))
+    }
 }
 
 private final class UnconfiguredTestClient: NightscoutClient {

@@ -121,10 +121,11 @@ struct StatusCardView: View {
 
         let pumpLevel: StatusLevelEnum = {
             guard let status = store.loopStatus else { return .warn }
-            if let reservoir = status.pumpReservoir, reservoir <= 10 { return .error }
-            if let battery = status.pumpBattery, battery <= 15       { return .error }
-            if let reservoir = status.pumpReservoir, reservoir <= 30 { return .warn }
-            if let battery = status.pumpBattery, battery <= 30       { return .warn }
+            let t = store.consumableThresholds
+            if let reservoir = status.pumpReservoir, Int(reservoir) <= t.reservoirCriticalUnits { return .error }
+            if let battery = status.pumpBattery, battery <= t.pumpBattCriticalPercent            { return .error }
+            if let reservoir = status.pumpReservoir, Int(reservoir) <= t.reservoirWarnUnits       { return .warn }
+            if let battery = status.pumpBattery, battery <= t.pumpBattWarnPercent                 { return .warn }
             return .ok
         }()
 
@@ -361,8 +362,8 @@ struct StatusCardView: View {
         return HStack(spacing: 8) {
             ForEach(changeAges, id: \.label) { item in
                 HStack(spacing: 2) {
-                    Image(systemName: item.icon).font(.caption2).foregroundColor(.secondary)
-                    Text(item.age).font(.caption2)
+                    Image(systemName: item.icon).font(.caption2).foregroundColor(consumableColor(item.level))
+                    Text(item.age).font(.caption2).foregroundColor(consumableColor(item.level))
                 }
             }
             Spacer()
@@ -376,19 +377,32 @@ struct StatusCardView: View {
         }
     }
 
-    private var changeAges: [(icon: String, label: String, age: String)] {
+    private var changeAges: [(icon: String, label: String, age: String, level: ConsumableLevel)] {
         let now = Date()
         let events = store.careEvents
+        let t = store.consumableThresholds
         let site = TreatmentAgeCalc.lastEventAge(treatments: events, eventTypes: ["Site Change"], now: now)
         let insulin = TreatmentAgeCalc.lastEventAge(treatments: events, eventTypes: ["Insulin Change"], now: now)
         let sensor = TreatmentAgeCalc.lastEventAge(treatments: events, eventTypes: ["Sensor Change", "Sensor Start"], now: now)
         let battery = TreatmentAgeCalc.lastEventAge(treatments: events, eventTypes: ["Pump Battery Change"], now: now)
         return [
-            ("ivfluid.bag", "Cannula",  TreatmentAgeCalc.formatAge(site)),
-            ("syringe", "Insulin",       TreatmentAgeCalc.formatAge(insulin)),
-            ("waveform.path.ecg", "Sensor", TreatmentAgeCalc.formatAge(sensor)),
-            ("battery.100percent", "Battery", TreatmentAgeCalc.formatAge(battery)),
+            ("ivfluid.bag", "Cannula",  TreatmentAgeCalc.formatAge(site),
+             ConsumableAgeCalc.level(ageSeconds: site,   warnHours: t.cageWarnHours, criticalHours: t.cageCriticalHours)),
+            ("syringe", "Insulin",       TreatmentAgeCalc.formatAge(insulin),
+             ConsumableAgeCalc.level(ageSeconds: insulin, warnHours: t.iageWarnHours, criticalHours: t.iageCriticalHours)),
+            ("waveform.path.ecg", "Sensor", TreatmentAgeCalc.formatAge(sensor),
+             ConsumableAgeCalc.level(ageSeconds: sensor, warnHours: t.sageWarnHours, criticalHours: t.sageCriticalHours)),
+            ("battery.100percent", "Battery", TreatmentAgeCalc.formatAge(battery),
+             ConsumableAgeCalc.level(ageSeconds: battery, warnHours: t.bageWarnHours, criticalHours: t.bageCriticalHours)),
         ]
+    }
+
+    private func consumableColor(_ level: ConsumableLevel) -> Color {
+        switch level {
+        case .ok: return .secondary
+        case .warn: return .orange
+        case .critical: return .red
+        }
     }
 
     private var reasonChips: some View {

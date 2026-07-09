@@ -17,3 +17,17 @@ enum TreatmentAgeCalc {
         return "\(hours)h"
     }
 }
+
+enum ConsumableLevel: Equatable {
+    case ok, warn, critical
+}
+
+enum ConsumableAgeCalc {
+    static func level(ageSeconds: TimeInterval?, warnHours: Int, criticalHours: Int) -> ConsumableLevel {
+        guard let ageSeconds else { return .ok }
+        let ageHours = ageSeconds / 3600
+        if ageHours >= Double(criticalHours) { return .critical }
+        if ageHours >= Double(warnHours) { return .warn }
+        return .ok
+    }
+}

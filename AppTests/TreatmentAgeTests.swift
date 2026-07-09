@@ -93,4 +93,24 @@ final class TreatmentAgeTests: XCTestCase {
         XCTAssertEqual(merged.last?.carbs, 20)
         XCTAssertEqual(merged.count, 2)
     }
+
+    func test_levelIsOkBelowWarnThreshold() {
+        let level = ConsumableAgeCalc.level(ageSeconds: 10 * 3600, warnHours: 48, criticalHours: 72)
+        XCTAssertEqual(level, .ok)
+    }
+
+    func test_levelIsWarnAtWarnThreshold() {
+        let level = ConsumableAgeCalc.level(ageSeconds: 48 * 3600, warnHours: 48, criticalHours: 72)
+        XCTAssertEqual(level, .warn)
+    }
+
+    func test_levelIsCriticalAtCriticalThreshold() {
+        let level = ConsumableAgeCalc.level(ageSeconds: 72 * 3600, warnHours: 48, criticalHours: 72)
+        XCTAssertEqual(level, .critical)
+    }
+
+    func test_levelIsOkWhenAgeUnknown() {
+        let level = ConsumableAgeCalc.level(ageSeconds: nil, warnHours: 48, criticalHours: 72)
+        XCTAssertEqual(level, .ok)
+    }
 }
