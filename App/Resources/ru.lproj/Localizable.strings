@@ -89,6 +89,8 @@
 "announcement.title" = "Уведомление от Nightscout";
 "settings.announcement_relay" = "Оповещения мастера";
 "settings.announcement_relay_caption" = "Показывает локальное уведомление, когда мастер публикует announcement в Nightscout (например, предупреждение о низком уровне глюкозы или автоматически сообщённую ошибку). Действует 60 минут с момента создания записи.";
+"settings.iaps_master_mode" = "Мастер на iAPS";
+"settings.iaps_master_mode_caption" = "Отправляет команды режима петли как Nightscout Announcements (enteredBy: remote) вместо OpenAPS Offline — так, как iAPS слушает удалённое управление. Требует включённой настройки «Remote control» в самом iAPS.";
 "settings.consumable_warnings" = "Пороги расходников";
 "settings.cage_warn" = "Канюля предупр. (ч)";
 "settings.cage_critical" = "Канюля крит. (ч)";

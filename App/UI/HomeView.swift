@@ -285,7 +285,7 @@ struct HomeView: View {
             return
         }
         Task {
-            let result = await HomeActions.setLoopMode(mode, durationMin: durationMin, writer: writer, store: store)
+            let result = await HomeActions.setLoopMode(mode, durationMin: durationMin, useIapsAnnouncement: store.isIapsMasterModeEnabled, writer: writer, store: store)
             statusMessage = result.message
             statusIsError = result.isError
         }

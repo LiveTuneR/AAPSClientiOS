@@ -85,6 +85,23 @@ final class NsTreatmentWriterTests: XCTestCase {
         XCTAssertEqual(p["app"] as? String, "AAPSClient-iOS")
     }
 
+    func test_announcementPayloadMatchesIapsContract() async throws {
+        let mock = FixtureNightscoutClient()
+        let writer = NsTreatmentWriterLive(client: mock)
+
+        try await writer.sendAnnouncement(notes: "looping:true")
+
+        let p = mock.postedPayloads.first!
+        XCTAssertEqual(p["eventType"] as? String, "Announcement")
+        XCTAssertEqual(p["notes"] as? String, "looping:true")
+        // iAPS's Announcement.action parser only fires for enteredBy == "remote" senders in
+        // practice (matches iAPS's own Shortcuts, which hard-code this) — NOT this app's usual
+        // "AAPSClient-iOS", which is why this is asserted explicitly rather than reusing appName.
+        XCTAssertEqual(p["enteredBy"] as? String, "remote")
+        XCTAssertEqual(p["app"] as? String, "AAPSClient-iOS")
+        XCTAssertNotNil(p["date"])
+    }
+
     func test_disconnectPumpPayload() {
         let p = NsTreatmentWriterLive.buildLoopMode("DISCONNECTED_PUMP", durationMin: 30)
         XCTAssertEqual(p["eventType"] as? String, "OpenAPS Offline")

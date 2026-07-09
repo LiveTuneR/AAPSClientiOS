@@ -89,6 +89,8 @@
 "announcement.title" = "Nightscout Announcement";
 "settings.announcement_relay" = "Master Announcements";
 "settings.announcement_relay_caption" = "Shows a local notification when the master device posts a Nightscout announcement (e.g. predicted-low carb suggestion or an auto-reported error), valid for 60 minutes after it was created.";
+"settings.iaps_master_mode" = "Master Runs iAPS";
+"settings.iaps_master_mode_caption" = "Sends Loop Mode commands as Nightscout Announcements (enteredBy: remote) instead of OpenAPS Offline events, matching how iAPS listens for remote control. Requires \"Remote control\" enabled in iAPS's own Nightscout settings.";
 "settings.consumable_warnings" = "Consumable Warnings";
 "settings.cage_warn" = "Cannula warn (h)";
 "settings.cage_critical" = "Cannula crit (h)";

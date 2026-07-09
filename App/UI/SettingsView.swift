@@ -29,6 +29,7 @@ struct SettingsView: View {
     @State private var liveActivityOn: Bool
     @State private var glucoseNotificationOn: Bool
     @State private var announcementRelayOn: Bool
+    @State private var iapsMasterModeOn: Bool
     @State private var eatingSoonTarget: String = ""
     @State private var eatingSoonDuration: String = ""
     @State private var activityTarget: String = ""
@@ -52,6 +53,7 @@ struct SettingsView: View {
         _liveActivityOn = State(initialValue: store.isLiveActivityEnabled)
         _glucoseNotificationOn = State(initialValue: store.isGlucoseNotificationEnabled)
         _announcementRelayOn = State(initialValue: store.isAnnouncementRelayEnabled)
+        _iapsMasterModeOn = State(initialValue: store.isIapsMasterModeEnabled)
         let presets = store.ttPresets
         func fmt(_ mgdl: Int) -> String {
             isMmol ? String(format: "%.1f", Double(mgdl) / glucoseMmolFactor) : String(mgdl)
@@ -254,6 +256,15 @@ struct SettingsView: View {
             } footer: {
                 Text(String(localized: "settings.announcement_relay_caption"))
             }
+
+            Section {
+                Toggle(String(localized: "settings.iaps_master_mode"), isOn: $iapsMasterModeOn)
+                    .onChange(of: iapsMasterModeOn) { on in
+                        store.setIapsMasterModeEnabled(on)
+                    }
+            } footer: {
+                Text(String(localized: "settings.iaps_master_mode_caption"))
+            }
         }
         .navigationTitle("settings.title")
         .onAppear { loadSettings() }
@@ -300,6 +311,7 @@ struct SettingsView: View {
         liveActivityOn = store.isLiveActivityEnabled
         glucoseNotificationOn = store.isGlucoseNotificationEnabled
         announcementRelayOn = store.isAnnouncementRelayEnabled
+        iapsMasterModeOn = store.isIapsMasterModeEnabled
     }
 
     private func changeDisplayUnits(to units: GlucoseUnits) {
