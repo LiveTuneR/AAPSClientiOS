@@ -80,4 +80,76 @@ enum ClientControlMessage {
     struct Ping: Codable {
         static let type = "ping"
     }
+
+    /// Asks the master to PREPARE a manual wizard-computed bolus from these raw inputs — the master
+    /// recomputes the dose on its OWN live profile/COB/IOB, constraint-caps it, and returns the full
+    /// breakdown in `BolusPreview.wizardDetail`. This app NEVER sends the matching commit — see the
+    /// plan header for why (permanent, deliberate bolus exclusion). `bg`/`carbs` mirror the master's
+    /// own manual bolus-wizard dialog inputs exactly.
+    struct WizardPrepare: Codable {
+        let bg: Double
+        let carbs: Int
+        let percentage: Int
+        let directCorrection: Double
+        let carbTime: Int
+        let useBg: Bool
+        let useCob: Bool
+        let useIob: Bool
+        let useTt: Bool
+        let useTrend: Bool
+        let alarm: Bool
+        let notes: String
+        let eCarbsGrams: Int
+        let eCarbsDelayMinutes: Int
+        let eCarbsDurationHours: Int
+        let profileName: String?
+        static let type = "wizard_prepare"
+    }
+}
+
+/// The master's computed preview for any two-step prepare→commit action (scene/wizard/bolus/batch),
+/// carried in `AckEnvelope.payload` for a `..Prepare` ack. Mirrors AndroidAPS `BolusPreview.kt`
+/// exactly — despite the name, this is the generic "prepared action" envelope reused across every
+/// prepare type on the master, not bolus-specific.
+struct BolusPreview: Codable, Equatable {
+    let bolusId: Int64
+    let lines: [ConfirmationLineDto]
+    let advisorApplies: Bool
+    let advisorLines: [ConfirmationLineDto]
+    let wizardDetail: WizardDetailDto?
+
+    init(bolusId: Int64, lines: [ConfirmationLineDto] = [], advisorApplies: Bool = false, advisorLines: [ConfirmationLineDto] = [], wizardDetail: WizardDetailDto? = nil) {
+        self.bolusId = bolusId
+        self.lines = lines
+        self.advisorApplies = advisorApplies
+        self.advisorLines = advisorLines
+        self.wizardDetail = wizardDetail
+    }
+}
+
+/// One confirmation line — the master's already-localized, color-coded wizard/scene confirmation text.
+/// Mirrors AndroidAPS `ConfirmationLineDto.kt`.
+struct ConfirmationLineDto: Codable, Equatable {
+    let role: String
+    let text: String
+}
+
+/// Raw wizard calculation breakdown, present only on `WizardPrepare`/`BolusPrepare` acks (absent for
+/// scene/batch-only prepares, hence optional on `BolusPreview`). Mirrors AndroidAPS `WizardDetailDto.kt`.
+struct WizardDetailDto: Codable, Equatable {
+    let totalInsulin: Double
+    let carbs: Int
+    let insulinFromBG: Double
+    let insulinFromTrend: Double
+    let insulinFromCOB: Double
+    let insulinFromCarbs: Double
+    let insulinFromBolusIOB: Double
+    let insulinFromBasalIOB: Double
+    let includeBolusIOB: Bool
+    let includeBasalIOB: Bool
+    let percentageCorrection: Int
+    let cob: Double
+    let tempTargetLabel: String?
+    let ic: Double
+    let sens: Double
 }

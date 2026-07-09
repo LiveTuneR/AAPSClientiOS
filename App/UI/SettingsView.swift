@@ -230,6 +230,12 @@ struct SettingsView: View {
                 Text("Pair with Master (Client Control)")
             }
 
+            NavigationLink {
+                BolusCalculatorView(store: store)
+            } label: {
+                Text("Bolus Calculator (Client Control)")
+            }
+
             if #available(iOS 16.1, *) {
                 Section {
                     Toggle(String(localized: "settings.live_activity"), isOn: $liveActivityOn)
