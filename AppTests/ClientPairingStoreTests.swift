@@ -29,4 +29,25 @@ final class ClientPairingStoreTests: XCTestCase {
         XCTAssertEqual(store.nextCounter(), 1)
         XCTAssertEqual(store.nextCounter(), 2)
     }
+
+    func test_pairRecordsPairedAtTimestamp() throws {
+        let store = ClientPairingStore(service: "test.clientcontrol.\(UUID().uuidString)")
+        defer { store.unpair() }
+
+        XCTAssertNil(store.pairedAt())
+
+        let before = Date()
+        store.pair(MasterPairing(masterInstallId: "m1", clientId: "c1", secretHex: "aabbcc"))
+        let after = Date()
+
+        let pairedAt = try XCTUnwrap(store.pairedAt())
+        XCTAssertTrue(pairedAt >= before && pairedAt <= after)
+    }
+
+    func test_unpairClearsPairedAt() throws {
+        let store = ClientPairingStore(service: "test.clientcontrol.\(UUID().uuidString)")
+        store.pair(MasterPairing(masterInstallId: "m1", clientId: "c1", secretHex: "aabbcc"))
+        store.unpair()
+        XCTAssertNil(store.pairedAt())
+    }
 }
