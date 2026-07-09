@@ -40,6 +40,10 @@ final class NsTreatmentWriterLive: NsTreatmentWriter, @unchecked Sendable {
         try await client.postTreatment(Self.buildLoopMode(mode, durationMin: durationMin))
     }
 
+    func sendAnnouncement(notes: String) async throws {
+        try await client.postTreatment(Self.buildAnnouncement(notes: notes))
+    }
+
     static func buildCarbs(grams: Double, at date: Date) -> [String: Any] {
         [
             "app": appName,
@@ -112,6 +116,19 @@ final class NsTreatmentWriterLive: NsTreatmentWriter, @unchecked Sendable {
             "duration": durationMin,
             "date": Int64(Date().timeIntervalSince1970 * 1000),
             "enteredBy": appName,
+        ]
+    }
+
+    static func buildAnnouncement(notes: String) -> [String: Any] {
+        [
+            "app": appName,
+            "eventType": "Announcement",
+            "notes": notes,
+            "date": Int64(Date().timeIntervalSince1970 * 1000),
+            // iAPS's own Shortcuts (OpenClosedShortcuts.swift, SuspendResumeShortcut.swift) hard-code
+            // enteredBy: "remote" for every Announcement they send — match that exactly. This is the
+            // one payload in this app that intentionally does NOT use `appName` for enteredBy.
+            "enteredBy": "remote",
         ]
     }
 }
