@@ -61,6 +61,7 @@ enum RefreshError: LocalizedError {
     static let liveActivityPushInterval: TimeInterval = 5 * 60
     static let glucoseNotificationEnabledKey = "notification.latestGlucose.enabled"
     static let announcementRelayEnabledKey = "announcementRelay.enabled"
+    static let iapsMasterModeEnabledKey = "iapsMasterMode.enabled"
 
     var isGlucoseNotificationEnabled: Bool {
         UserDefaults.standard.bool(forKey: Self.glucoseNotificationEnabledKey)
@@ -74,6 +75,14 @@ enum RefreshError: LocalizedError {
 
     func setAnnouncementRelayEnabled(_ on: Bool) {
         UserDefaults.standard.set(on, forKey: Self.announcementRelayEnabledKey)
+    }
+
+    var isIapsMasterModeEnabled: Bool {
+        UserDefaults.standard.bool(forKey: Self.iapsMasterModeEnabledKey)
+    }
+
+    func setIapsMasterModeEnabled(_ on: Bool) {
+        UserDefaults.standard.set(on, forKey: Self.iapsMasterModeEnabledKey)
     }
 
     var isLiveActivityEnabled: Bool {
