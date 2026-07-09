@@ -27,6 +27,7 @@ final class FixtureNightscoutClient: NightscoutClient {
     var cancelAfterEntries = false
     var treatmentsOverride: [Treatment]?
     var loopStatusOverride: LoopStatus?
+    var settingsDocumentOverride: [String: NsSettingsDocument] = [:]
     var settingsByIdentifier: [String: String] = [
         NightscoutSettingsIdentifier.cold: "settings_aaps",
         NightscoutSettingsIdentifier.state: "settings_aaps_state",
@@ -72,6 +73,7 @@ final class FixtureNightscoutClient: NightscoutClient {
 
     func fetchSettings(identifier: String) async throws -> NsSettingsDocument? {
         if let error = shouldThrow { throw error }
+        if let override = settingsDocumentOverride[identifier] { return override }
         guard let fixture = settingsByIdentifier[identifier] else { return nil }
         let data = try loadFixture(fixture)
         return try NsMapping.settingsDocument(from: data, identifier: identifier)

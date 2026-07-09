@@ -29,4 +29,20 @@ final class ClientControlModelsTests: XCTestCase {
         XCTAssertEqual(payload.masterInstallId, "m1")
         XCTAssertEqual(payload.secretHex, "aa")
     }
+
+    func test_ackEnvelopeCanonicalStringMatchesAndroidApsFormat() {
+        let ack = AckEnvelope(
+            clientId: "c1", commandCounter: 1, phase: .done, status: .ok,
+            reason: nil, payload: nil, timestamp: 1000, signature: ""
+        )
+        XCTAssertEqual(ack.canonicalString(), "c1|1|Done|Ok|||1000")
+    }
+
+    func test_ackEnvelopeDecodesFromNsJson() throws {
+        let json = #"{"clientId":"c1","commandCounter":2,"phase":"Executing","status":"Pending","timestamp":500,"signature":"deadbeef"}"#
+        let ack = try JSONDecoder().decode(AckEnvelope.self, from: Data(json.utf8))
+        XCTAssertEqual(ack.phase, .executing)
+        XCTAssertEqual(ack.status, .pending)
+        XCTAssertNil(ack.reason)
+    }
 }

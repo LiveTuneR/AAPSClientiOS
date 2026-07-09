@@ -203,7 +203,21 @@ final class NsMappingTests: XCTestCase {
         XCTAssertNil(document)
     }
 
+    func test_settingsDocumentToleratesAckShapedDocument() throws {
+        let json = #"""
+        {"status":200,"result":{"identifier":"aaps_clientcontrol_ack_c1","date":1,"utcOffset":0,"app":"AAPS","schemaVersion":1,"ack":{"clientId":"c1","commandCounter":1,"phase":"Done","status":"Ok","timestamp":1000,"signature":"abc"}}}
+        """#
+        let document = try NsMapping.settingsDocument(from: Data(json.utf8), identifier: "aaps_clientcontrol_ack_c1")
+        XCTAssertNotNil(document)
+        XCTAssertTrue(document?.runningConfigJson.contains("\"status\":\"Ok\"") == true)
+    }
+
     func test_settingsDocumentThrowsOnInvalidRunningConfig() throws {
+        let data = try loadFixture("settings_invalid")
+        XCTAssertThrowsError(try NsMapping.settingsDocument(from: data, identifier: NightscoutSettingsIdentifier.cold))
+    }
+
+    func test_settingsDocumentThrowsOnInvalidRunningConfig_stillThrows() throws {
         let data = try loadFixture("settings_invalid")
         XCTAssertThrowsError(try NsMapping.settingsDocument(from: data, identifier: NightscoutSettingsIdentifier.cold))
     }

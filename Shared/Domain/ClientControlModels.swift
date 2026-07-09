@@ -38,6 +38,39 @@ struct SignedEnvelope: Codable, Equatable {
     }
 }
 
+/// Mirrors AndroidAPS `AckEnvelope.kt` exactly — the master's signed acknowledgement for a
+/// single client-control command, written to `aaps_clientcontrol_ack_<clientId>` (overwritten
+/// in place) under a top-level `"ack"` field. Field order in `canonicalString()` is the wire
+/// contract for HMAC verification — do not reorder.
+struct AckEnvelope: Codable, Equatable {
+    let clientId: String
+    let commandCounter: Int64
+    let phase: AckPhase
+    let status: AckStatus
+    let reason: String?
+    let payload: String?
+    let timestamp: Int64
+    var signature: String
+
+    func canonicalString() -> String {
+        "\(clientId)|\(commandCounter)|\(phase.rawValue)|\(status.rawValue)|\(reason ?? "")|\(payload ?? "")|\(timestamp)"
+    }
+}
+
+/// Matches Kotlin's `@SerialName`-annotated enum cases exactly (case-sensitive on the wire).
+enum AckPhase: String, Codable {
+    case executing = "Executing"
+    case done = "Done"
+    case delivery = "Delivery"
+}
+
+enum AckStatus: String, Codable {
+    case pending = "Pending"
+    case ok = "Ok"
+    case failed = "Failed"
+    case expired = "Expired"
+}
+
 enum ClientControlMessage {
     struct Hello: Codable {
         var protocolVersion: Int = 1
