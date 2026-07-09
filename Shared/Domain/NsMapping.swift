@@ -144,16 +144,14 @@ enum NsMapping {
 
     static func settingsDocument(from data: Data, identifier: String) throws -> NsSettingsDocument? {
         guard let doc = try resultObject(data) else { return nil }
-        guard let runningConfig = doc["runningConfig"] else {
-            throw NsError.decoding("Settings \(identifier) missing runningConfig")
-        }
-        return try settingsDocument(from: doc, identifier: identifier, configValue: runningConfig)
+        let configValue = doc["runningConfig"] ?? doc["ack"] ?? doc["envelope"] ?? doc["offer"] ?? [:]
+        return try settingsDocument(from: doc, identifier: identifier, configValue: configValue)
     }
 
     static func settingsDocuments(from data: Data) throws -> [NsSettingsDocument] {
         try resultArray(data).compactMap { doc in
             guard let identifier = doc["identifier"] as? String else { return nil }
-            let configValue = doc["runningConfig"] ?? doc["offer"] ?? doc["envelope"] ?? [:]
+            let configValue = doc["runningConfig"] ?? doc["ack"] ?? doc["offer"] ?? doc["envelope"] ?? [:]
             return try settingsDocument(from: doc, identifier: identifier, configValue: configValue)
         }
     }
