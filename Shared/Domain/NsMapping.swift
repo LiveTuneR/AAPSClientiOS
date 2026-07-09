@@ -147,19 +147,15 @@ enum NsMapping {
         guard let runningConfig = doc["runningConfig"] else {
             throw NsError.decoding("Settings \(identifier) missing runningConfig")
         }
-        guard JSONSerialization.isValidJSONObject(runningConfig),
-              let runningData = try? JSONSerialization.data(withJSONObject: runningConfig),
-              let runningJson = String(data: runningData, encoding: .utf8) else {
-            throw NsError.decoding("Settings \(identifier) has invalid runningConfig")
+        return try settingsDocument(from: doc, identifier: identifier, configValue: runningConfig)
+    }
+
+    static func settingsDocuments(from data: Data) throws -> [NsSettingsDocument] {
+        try resultArray(data).compactMap { doc in
+            guard let identifier = doc["identifier"] as? String else { return nil }
+            let configValue = doc["runningConfig"] ?? doc["offer"] ?? doc["envelope"] ?? [:]
+            return try settingsDocument(from: doc, identifier: identifier, configValue: configValue)
         }
-        return NsSettingsDocument(
-            identifier: identifier,
-            app: doc["app"] as? String,
-            schemaVersion: intVal(doc["schemaVersion"]),
-            date: millisDate(from: num(doc["date"])),
-            srvModified: millisDate(from: num(doc["srvModified"])),
-            runningConfigJson: runningJson
-        )
     }
 
     static func runningConfigCold(from document: NsSettingsDocument) throws -> NsRunningConfigCold {
@@ -225,6 +221,22 @@ enum NsMapping {
             throw NsError.decoding("Settings \(document.identifier) has invalid runningConfig")
         }
         return config
+    }
+
+    private static func settingsDocument(from doc: [String: Any], identifier: String, configValue: Any) throws -> NsSettingsDocument {
+        guard JSONSerialization.isValidJSONObject(configValue),
+              let configData = try? JSONSerialization.data(withJSONObject: configValue),
+              let configJson = String(data: configData, encoding: .utf8) else {
+            throw NsError.decoding("Settings \(identifier) has invalid runningConfig")
+        }
+        return NsSettingsDocument(
+            identifier: identifier,
+            app: doc["app"] as? String,
+            schemaVersion: intVal(doc["schemaVersion"]),
+            date: millisDate(from: num(doc["date"])),
+            srvModified: millisDate(from: num(doc["srvModified"])),
+            runningConfigJson: configJson
+        )
     }
 
     private static func predictions(from src: [String: Any]?) -> Predictions? {

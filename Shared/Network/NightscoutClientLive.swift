@@ -85,6 +85,18 @@ actor NightscoutClientLive: NightscoutClient {
         return try NsMapping.settingsDocument(from: data, identifier: identifier)
     }
 
+    func putSettings(identifier: String, document: [String: Any]) async throws {
+        let path = "api/v3/settings/\(identifier)"
+        let body = try JSONSerialization.data(withJSONObject: document)
+        _ = try await put(path, body: body)
+    }
+
+    func searchSettings(limit: Int) async throws -> [NsSettingsDocument] {
+        let path = "api/v3/settings?limit=\(limit)"
+        let data = try await get(path)
+        return try NsMapping.settingsDocuments(from: data)
+    }
+
     func fetchRunningConfigCold() async throws -> NsRunningConfigCold? {
         guard let document = try await fetchSettings(identifier: NightscoutSettingsIdentifier.cold) else { return nil }
         return try NsMapping.runningConfigCold(from: document)
@@ -172,6 +184,16 @@ actor NightscoutClientLive: NightscoutClient {
         guard let url = URL(string: urlString) else { throw NsError.badURL }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = body
+        return try await authenticatedData(request)
+    }
+
+    private func put(_ path: String, body: Data) async throws -> Data {
+        let urlString = "\(nsURL)\(path)"
+        guard let url = URL(string: urlString) else { throw NsError.badURL }
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = body
         return try await authenticatedData(request)

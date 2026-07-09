@@ -367,6 +367,8 @@ private final class UnconfiguredTestClient: NightscoutClient {
     func fetchProfile() async throws -> NsProfile { throw NsError.badURL }
     func fetchProfileStore() async throws -> NsProfileStore { throw NsError.badURL }
     func fetchSettings(identifier: String) async throws -> NsSettingsDocument? { throw NsError.badURL }
+    func putSettings(identifier: String, document: [String: Any]) async throws { throw NsError.badURL }
+    func searchSettings(limit: Int) async throws -> [NsSettingsDocument] { throw NsError.badURL }
     func fetchRunningConfigCold() async throws -> NsRunningConfigCold? { throw NsError.badURL }
     func fetchRunningConfigHot() async throws -> NsRunningConfigHot? { throw NsError.badURL }
     func postTreatment(_ payload: [String: Any]) async throws { throw NsError.badURL }

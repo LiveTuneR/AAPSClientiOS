@@ -19,6 +19,8 @@ final class MockAuthTransport: HttpTransport {
 
 final class FixtureNightscoutClient: NightscoutClient {
     var postedPayloads: [[String: Any]] = []
+    var putSettingsCalls: [(identifier: String, document: [String: Any])] = []
+    var settingsSearchResults: [NsSettingsDocument] = []
     var shouldThrow: Error?
     /// Simulate a Task cancelled mid-refresh: entries succeed, later stages throw
     /// CancellationError (the real-world trigger for the frozen widget/LA bug).
@@ -73,6 +75,17 @@ final class FixtureNightscoutClient: NightscoutClient {
         guard let fixture = settingsByIdentifier[identifier] else { return nil }
         let data = try loadFixture(fixture)
         return try NsMapping.settingsDocument(from: data, identifier: identifier)
+    }
+
+    func putSettings(identifier: String, document: [String: Any]) async throws {
+        if let error = shouldThrow { throw error }
+        putSettingsCalls.append((identifier, document))
+        postedPayloads.append(document)
+    }
+
+    func searchSettings(limit: Int) async throws -> [NsSettingsDocument] {
+        if let error = shouldThrow { throw error }
+        return settingsSearchResults
     }
 
     func fetchEntries(sinceDays days: Int) async throws -> [GlucoseReading] {

@@ -4,6 +4,7 @@ import Foundation
 enum KeychainKey: String, CaseIterable {
     case nsUrl
     case nsAccessToken
+    case clientControlPairing
 }
 
 final class KeychainStore {

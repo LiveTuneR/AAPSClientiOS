@@ -222,6 +222,12 @@ struct SettingsView: View {
                 Text(String(localized: "remote.master_title"))
             }
 
+            NavigationLink {
+                ClientControlPairingView(store: store)
+            } label: {
+                Text("Pair with Master (Client Control)")
+            }
+
             if #available(iOS 16.1, *) {
                 Section {
                     Toggle(String(localized: "settings.live_activity"), isOn: $liveActivityOn)

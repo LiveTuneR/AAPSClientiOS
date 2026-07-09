@@ -170,4 +170,36 @@ final class NightscoutReadTests: XCTestCase {
         XCTAssertEqual(hot?.activeScene?.sceneId, "school-sport")
         XCTAssertEqual(hot?.usedAutosensOnMainPhone, true)
     }
+
+    func test_putSettingsUsesCorrectEndpointAndMethod() async throws {
+        let transport = MockAuthTransport()
+        transport.responseData = #"{"token":"jwt","iat":1,"exp":99999}"#.data(using: .utf8)!
+        let client = NightscoutClientLive(baseURL: testBaseURL, accessToken: "t", transport: transport)
+        try await client.authorize()
+
+        transport.responseData = #"{"status":200}"#.data(using: .utf8)!
+        try await client.putSettings(identifier: "aaps_clientcontrol_hello_abc", document: ["schemaVersion": 1])
+
+        XCTAssertEqual(transport.lastRequest?.httpMethod, "PUT")
+        XCTAssertTrue(transport.lastRequest?.url?.absoluteString.contains("api/v3/settings/aaps_clientcontrol_hello_abc") == true)
+    }
+
+    func test_searchSettingsReturnsAllMatchingIdentifiers() async throws {
+        let transport = MockAuthTransport()
+        transport.responseData = #"{"token":"jwt","iat":1,"exp":99999}"#.data(using: .utf8)!
+        let client = NightscoutClientLive(baseURL: testBaseURL, accessToken: "t", transport: transport)
+        try await client.authorize()
+
+        transport.responseData = #"""
+        {"status":200,"result":[
+            {"identifier":"aaps_clientcontrol_offer_c1","runningConfig":{},"date":1,"utcOffset":0,"app":"AAPS","schemaVersion":1},
+            {"identifier":"aaps-state","runningConfig":{},"date":1,"utcOffset":0,"app":"AAPS","schemaVersion":1}
+        ]}
+        """#.data(using: .utf8)!
+        let docs = try await client.searchSettings(limit: 500)
+
+        XCTAssertEqual(transport.lastRequest?.url?.absoluteString.contains("api/v3/settings?"), true)
+        XCTAssertEqual(docs.count, 2)
+        XCTAssertEqual(docs.first?.identifier, "aaps_clientcontrol_offer_c1")
+    }
 }

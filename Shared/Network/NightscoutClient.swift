@@ -8,6 +8,8 @@ protocol NightscoutClient: Sendable {
     func fetchProfile() async throws -> NsProfile
     func fetchProfileStore() async throws -> NsProfileStore
     func fetchSettings(identifier: String) async throws -> NsSettingsDocument?
+    func putSettings(identifier: String, document: [String: Any]) async throws
+    func searchSettings(limit: Int) async throws -> [NsSettingsDocument]
     func fetchRunningConfigCold() async throws -> NsRunningConfigCold?
     func fetchRunningConfigHot() async throws -> NsRunningConfigHot?
     func postTreatment(_ payload: [String: Any]) async throws
