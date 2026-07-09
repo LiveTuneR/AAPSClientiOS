@@ -114,11 +114,28 @@ struct ClientControlPairingView: View {
         Task {
             let publisher = ClientControlPublisher(client: store.client, pairingStore: pairingStore)
             do {
-                try await publisher.sendPing()
-                await MainActor.run { statusText = "Ping sent." }
+                let counter = try await publisher.sendPing()
+                await MainActor.run { statusText = "Ping sent, waiting for ack..." }
+                for _ in 0..<5 {
+                    try await Task.sleep(nanoseconds: 1_000_000_000)
+                    let result = try await publisher.fetchAck(expectedCounter: counter)
+                    if case .pending = result { continue }
+                    await MainActor.run { statusText = describe(result) }
+                    return
+                }
+                await MainActor.run { statusText = "Ping sent, no ack yet (master may be offline)." }
             } catch {
                 await MainActor.run { statusText = "Ping failed: \(error)" }
             }
+        }
+    }
+
+    private func describe(_ result: ClientControlPublisher.AckResult) -> String {
+        switch result {
+        case .pending: return "Ping sent, no ack yet."
+        case .invalidSignature: return "Ack received but signature did not verify — rejected."
+        case .terminal(.ok, _): return "Ping acknowledged by master."
+        case .terminal(let status, let reason): return "Ping \(status.rawValue.lowercased())\(reason.map { ": \($0)" } ?? "")."
         }
     }
 
