@@ -51,6 +51,7 @@
 "history.section.carbs" = "Углеводы";
 "history.section.targets" = "Цели";
 "history.section.basal" = "Базал";
+"history.section.loop_mode" = "Режим петли";
 "history.section.profile" = "Профиль";
 "history.section.events" = "События";
 

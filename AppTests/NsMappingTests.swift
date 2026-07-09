@@ -250,4 +250,16 @@ final class NsMappingTests: XCTestCase {
         XCTAssertFalse(capabilities.canRemoteTherapyEvents)
         XCTAssertFalse(capabilities.canRemoteRunningMode)
     }
+
+    func test_loopModeTreatmentGetsReadableNotesFallback() throws {
+        let json = #"{"status":200,"result":[{"eventType":"OpenAPS Offline","mode":"DISCONNECTED_PUMP","duration":30,"date":1}]}"#
+        let r = try NsMapping.treatments(from: json.data(using: .utf8)!)
+        XCTAssertEqual(r[0].notes, "Disconnected")
+    }
+
+    func test_loopModeTreatmentPrefersServerNotesOverModeFallback() throws {
+        let json = #"{"status":200,"result":[{"eventType":"OpenAPS Offline","mode":"CLOSED_LOOP","duration":0,"notes":"Manual close","date":1}]}"#
+        let r = try NsMapping.treatments(from: json.data(using: .utf8)!)
+        XCTAssertEqual(r[0].notes, "Manual close")
+    }
 }

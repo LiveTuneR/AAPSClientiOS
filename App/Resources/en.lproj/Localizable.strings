@@ -51,6 +51,7 @@
 "history.section.carbs" = "Carbs";
 "history.section.targets" = "Targets";
 "history.section.basal" = "Basal";
+"history.section.loop_mode" = "Loop Mode";
 "history.section.profile" = "Profile";
 "history.section.events" = "Events";
 

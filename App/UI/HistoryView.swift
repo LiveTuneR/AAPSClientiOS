@@ -199,6 +199,7 @@ private enum HistorySection: String, CaseIterable, Identifiable {
     case carbs
     case targets
     case basal
+    case loopMode
     case profile
     case events
 
@@ -209,6 +210,7 @@ private enum HistorySection: String, CaseIterable, Identifiable {
         case .carbs: return "history.section.carbs"
         case .targets: return "history.section.targets"
         case .basal: return "history.section.basal"
+        case .loopMode: return "history.section.loop_mode"
         case .profile: return "history.section.profile"
         case .events: return "history.section.events"
         }
@@ -223,7 +225,9 @@ private enum HistorySection: String, CaseIterable, Identifiable {
         case .targets:
             return treatment.eventType == "Temporary Target"
         case .basal:
-            return treatment.eventType == "Temp Basal" || treatment.eventType == "OpenAPS Offline"
+            return treatment.eventType == "Temp Basal"
+        case .loopMode:
+            return treatment.eventType == "OpenAPS Offline"
         case .profile:
             return treatment.eventType == "Profile Switch"
         case .events:

@@ -29,15 +29,17 @@ enum NsMapping {
         try resultArray(data).map { d in
             let ts = num(d["date"]) ?? num(d["mills"]) ?? num(d["timestamp"])
             let createdAt = (d["created_at"] as? String).flatMap(isoParse)
+            let eventType = (d["eventType"] as? String) ?? ""
+            let rawNotes = d["notes"] as? String
             return Treatment(
                 id: (d["identifier"] as? String) ?? (d["_id"] as? String) ?? UUID().uuidString,
-                eventType: (d["eventType"] as? String) ?? "",
+                eventType: eventType,
                 date: ts.map { Date(timeIntervalSince1970: $0 / 1000) } ?? createdAt ?? Date(),
                 insulin: num(d["insulin"]),
                 carbs: num(d["carbs"]),
                 durationMin: intVal(d["duration"]),
                 enteredBy: d["enteredBy"] as? String,
-                notes: d["notes"] as? String,
+                notes: (rawNotes?.isEmpty == false) ? rawNotes : loopModeLabel(eventType: eventType, mode: d["mode"] as? String),
                 targetBottom: parseTTTarget(from: d).bottom,
                 targetTop: parseTTTarget(from: d).top,
                 profileName: d["profile"] as? String,
@@ -291,6 +293,17 @@ enum NsMapping {
             iobPredBg: intVal(e["IOBpredBG"]),
             cobPredBg: intVal(e["COBpredBG"])
         )
+    }
+
+    private static func loopModeLabel(eventType: String, mode: String?) -> String? {
+        guard eventType == "OpenAPS Offline" else { return nil }
+        switch mode {
+        case "CLOSED_LOOP": return "Closed Loop"
+        case "OPEN_LOOP": return "Open Loop"
+        case "SUSPENDED_BY_USER": return "Suspended"
+        case "DISCONNECTED_PUMP": return "Disconnected"
+        default: return mode
+        }
     }
 
     private static func parseTTTarget(from d: [String: Any]) -> (bottom: Int?, top: Int?) {
