@@ -89,9 +89,13 @@ enum HomeActions {
         }
     }
 
-    static func setLoopMode(_ mode: String, durationMin: Int, writer: NsTreatmentWriter, store: AppStore) async -> (message: String, isError: Bool) {
+    static func setLoopMode(_ mode: String, durationMin: Int, useIapsAnnouncement: Bool, writer: NsTreatmentWriter, store: AppStore) async -> (message: String, isError: Bool) {
         do {
-            try await writer.setLoopMode(mode, durationMin: durationMin)
+            if useIapsAnnouncement, let notes = IapsAnnouncementMapping.notes(forMode: mode) {
+                try await writer.sendAnnouncement(notes: notes)
+            } else {
+                try await writer.setLoopMode(mode, durationMin: durationMin)
+            }
             try? await store.refresh()
             return ("Loop command sent", false)
         } catch {
