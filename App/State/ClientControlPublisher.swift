@@ -33,13 +33,45 @@ final class ClientControlPublisher {
         )
     }
 
+    @discardableResult
+    func sendScenePrepare(sceneId: String, durationMinutes: Int?) async throws -> Int64 {
+        try await send(
+            type: ClientControlMessage.ScenePrepare.type,
+            payload: ClientControlMessage.ScenePrepare(sceneId: sceneId, durationMinutes: durationMinutes),
+            identifierPrefix: "aaps_clientcontrol_cmd_scene_prepare_",
+            wantsAck: true
+        )
+    }
+
+    @discardableResult
+    func sendSceneCommit(bolusId: Int64) async throws -> Int64 {
+        try await send(
+            type: ClientControlMessage.SceneCommit.type,
+            payload: ClientControlMessage.SceneCommit(bolusId: bolusId),
+            identifierPrefix: "aaps_clientcontrol_cmd_scene_commit_",
+            wantsAck: true
+        )
+    }
+
+    @discardableResult
+    func sendSceneStop(triggerChain: Bool) async throws -> Int64 {
+        try await send(
+            type: ClientControlMessage.SceneStop.type,
+            payload: ClientControlMessage.SceneStop(triggerChain: triggerChain),
+            identifierPrefix: "aaps_clientcontrol_cmd_scene_stop_",
+            wantsAck: true
+        )
+    }
+
     /// Result of checking the master's `aaps_clientcontrol_ack_<clientId>` document against a
     /// specific command counter this client sent with `wantsAck: true`.
     enum AckResult: Equatable {
         /// Ack doc doesn't exist yet, or still reflects an older counter — command not yet acked.
         case pending
-        /// Master processed the command; terminal outcome (Ok/Failed/Expired) with optional reason.
-        case terminal(AckStatus, reason: String?)
+        /// Master processed the command; terminal outcome with optional reason AND the raw ack
+        /// payload string (JSON-decode as `BolusPreview` when the command was a `..Prepare`; nil
+        /// for commands with no payload, like `Ping`).
+        case terminal(AckStatus, reason: String?, payload: String?)
         /// A doc for this counter exists but the HMAC signature doesn't verify against our shared
         /// secret — reject it rather than trust an unverifiable "Ok". Never silently treat as success.
         case invalidSignature
@@ -67,7 +99,7 @@ final class ClientControlPublisher {
         if ack.phase == .executing {
             return .pending
         }
-        return .terminal(ack.status, reason: ack.reason)
+        return .terminal(ack.status, reason: ack.reason, payload: ack.payload)
     }
 
     @discardableResult
