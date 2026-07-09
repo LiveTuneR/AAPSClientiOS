@@ -80,4 +80,30 @@ final class AlarmEngineTests: XCTestCase {
         let result = engine.evaluate(latest: reading, lastUpdate: .now, now: .now, thresholds: thresholds)
         XCTAssertEqual(result, .urgentLow)
     }
+
+    func test_predictedLowFiresBelowThreshold() {
+        let engine = AlarmEngineLive()
+        let result = engine.evaluatePredictedLow(minPredBgMgdl: 60, thresholdMgdl: 70, now: .now)
+        XCTAssertEqual(result, .predictedLow)
+    }
+
+    func test_predictedLowDoesNotFireAtOrAboveThreshold() {
+        let engine = AlarmEngineLive()
+        let result = engine.evaluatePredictedLow(minPredBgMgdl: 70, thresholdMgdl: 70, now: .now)
+        XCTAssertNil(result)
+    }
+
+    func test_predictedLowNilWhenNoPrediction() {
+        let engine = AlarmEngineLive()
+        let result = engine.evaluatePredictedLow(minPredBgMgdl: nil, thresholdMgdl: 70, now: .now)
+        XCTAssertNil(result)
+    }
+
+    func test_predictedLowRespectsSnooze() {
+        let engine = AlarmEngineLive()
+        let futureDate = Date().addingTimeInterval(600)
+        engine.snooze(.predictedLow, until: futureDate)
+        let result = engine.evaluatePredictedLow(minPredBgMgdl: 50, thresholdMgdl: 70, now: .now)
+        XCTAssertNil(result)
+    }
 }

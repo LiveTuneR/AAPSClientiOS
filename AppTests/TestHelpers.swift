@@ -24,6 +24,7 @@ final class FixtureNightscoutClient: NightscoutClient {
     /// CancellationError (the real-world trigger for the frozen widget/LA bug).
     var cancelAfterEntries = false
     var treatmentsOverride: [Treatment]?
+    var loopStatusOverride: LoopStatus?
     var settingsByIdentifier: [String: String] = [
         NightscoutSettingsIdentifier.cold: "settings_aaps",
         NightscoutSettingsIdentifier.state: "settings_aaps_state",
@@ -50,6 +51,7 @@ final class FixtureNightscoutClient: NightscoutClient {
     func fetchDeviceStatus() async throws -> LoopStatus? {
         if cancelAfterEntries { throw CancellationError() }
         if let error = shouldThrow { throw error }
+        if let loopStatusOverride { return loopStatusOverride }
         let data = try loadFixture("devicestatus")
         return try NsMapping.loopStatus(from: data)
     }

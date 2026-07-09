@@ -400,7 +400,7 @@ struct ConsumableThresholds: Equatable, Codable {
 }
 
 enum AlarmType: Equatable, Hashable {
-    case urgentLow, low, high, urgentHigh, noData, connectionLost
+    case urgentLow, low, high, urgentHigh, noData, connectionLost, predictedLow
 }
 
 enum TtReason: String {

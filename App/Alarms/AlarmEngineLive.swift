@@ -2,6 +2,7 @@ import Foundation
 
 protocol AlarmEngine {
     func evaluate(latest: GlucoseReading?, lastUpdate: Date, now: Date, thresholds: AlarmThresholds) -> AlarmType?
+    func evaluatePredictedLow(minPredBgMgdl: Int?, thresholdMgdl: Int, now: Date) -> AlarmType?
     func schedule(_ type: AlarmType)
     func snooze(_ type: AlarmType, until: Date)
 }
@@ -50,6 +51,11 @@ final class AlarmEngineLive: AlarmEngine {
         notifier.remove(identifier: type.identifier)
     }
 
+    func evaluatePredictedLow(minPredBgMgdl: Int?, thresholdMgdl: Int, now: Date) -> AlarmType? {
+        guard let minPredBgMgdl, minPredBgMgdl < thresholdMgdl else { return nil }
+        return nonSnoozed(.predictedLow, now: now)
+    }
+
     private func nonSnoozed(_ type: AlarmType, now: Date) -> AlarmType? {
         lock.lock()
         let until = snoozed[type]
@@ -70,6 +76,7 @@ extension AlarmType {
         case .urgentHigh: return "Urgent High"
         case .noData: return "No Data"
         case .connectionLost: return "Connection Lost"
+        case .predictedLow: return "Predicted Low"
         }
     }
 
@@ -81,6 +88,7 @@ extension AlarmType {
         case .urgentHigh: return "Glucose is critically high"
         case .noData: return "Glucose data is stale or missing"
         case .connectionLost: return "Cannot reach Nightscout"
+        case .predictedLow: return "Master predicts a low soon — consider carbs"
         }
     }
 
@@ -92,6 +100,7 @@ extension AlarmType {
         case .urgentHigh: return "alarm.urgentHigh"
         case .noData: return "alarm.noData"
         case .connectionLost: return "alarm.connectionLost"
+        case .predictedLow: return "alarm.predictedLow"
         }
     }
 }
