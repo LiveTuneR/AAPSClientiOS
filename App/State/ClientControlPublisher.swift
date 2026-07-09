@@ -14,7 +14,8 @@ final class ClientControlPublisher {
         self.pairingStore = pairingStore
     }
 
-    func sendHello() async throws {
+    @discardableResult
+    func sendHello() async throws -> Int64 {
         try await send(
             type: ClientControlMessage.Hello.type,
             payload: ClientControlMessage.Hello(),
@@ -22,15 +23,55 @@ final class ClientControlPublisher {
         )
     }
 
-    func sendPing() async throws {
+    @discardableResult
+    func sendPing() async throws -> Int64 {
         try await send(
             type: ClientControlMessage.Ping.type,
             payload: ClientControlMessage.Ping(),
-            identifierPrefix: "aaps_clientcontrol_cmd_ping_"
+            identifierPrefix: "aaps_clientcontrol_cmd_ping_",
+            wantsAck: true
         )
     }
 
-    private func send<T: Encodable>(type: String, payload: T, identifierPrefix: String) async throws {
+    /// Result of checking the master's `aaps_clientcontrol_ack_<clientId>` document against a
+    /// specific command counter this client sent with `wantsAck: true`.
+    enum AckResult: Equatable {
+        /// Ack doc doesn't exist yet, or still reflects an older counter — command not yet acked.
+        case pending
+        /// Master processed the command; terminal outcome (Ok/Failed/Expired) with optional reason.
+        case terminal(AckStatus, reason: String?)
+        /// A doc for this counter exists but the HMAC signature doesn't verify against our shared
+        /// secret — reject it rather than trust an unverifiable "Ok". Never silently treat as success.
+        case invalidSignature
+    }
+
+    /// Fetches and verifies the ack for a command sent with counter `expectedCounter`. Mirrors the
+    /// master's `writeAck` lifecycle (Executing/Pending -> Done/{Ok,Failed,Expired}) — a `.pending`
+    /// result covers both "not written yet" and "still on the Executing phase".
+    func fetchAck(expectedCounter: Int64) async throws -> AckResult {
+        guard let pairing = pairingStore.currentPairing(),
+              let secret = ClientControlCrypto.hexToBytes(pairing.secretHex) else {
+            throw PublishError.notPaired
+        }
+        guard let document = try await client.fetchSettings(identifier: "aaps_clientcontrol_ack_\(pairing.clientId)"),
+              let ackData = document.runningConfigJson.data(using: .utf8),
+              let ack = try? JSONDecoder().decode(AckEnvelope.self, from: ackData) else {
+            return .pending
+        }
+        guard ack.commandCounter == expectedCounter else {
+            return .pending
+        }
+        guard ClientControlCrypto.verify(secret: secret, canonical: ack.canonicalString(), signature: ack.signature) else {
+            return .invalidSignature
+        }
+        if ack.phase == .executing {
+            return .pending
+        }
+        return .terminal(ack.status, reason: ack.reason)
+    }
+
+    @discardableResult
+    private func send<T: Encodable>(type: String, payload: T, identifierPrefix: String, wantsAck: Bool = false) async throws -> Int64 {
         guard let pairing = pairingStore.currentPairing(),
               let secret = ClientControlCrypto.hexToBytes(pairing.secretHex) else {
             throw PublishError.notPaired
@@ -50,7 +91,7 @@ final class ClientControlPublisher {
             payload: payloadJson,
             signature: "",
             validUntil: nowMs + 5 * 60 * 1000,
-            wantsAck: false
+            wantsAck: wantsAck
         )
         envelope.signature = ClientControlCrypto.sign(secret: secret, canonical: envelope.canonicalString())
 
@@ -67,5 +108,6 @@ final class ClientControlPublisher {
             "envelope": envelopeObject,
         ]
         try await client.putSettings(identifier: "\(identifierPrefix)\(pairing.clientId)", document: document)
+        return envelope.counter
     }
 }
