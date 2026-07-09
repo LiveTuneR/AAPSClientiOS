@@ -357,6 +357,33 @@ final class AppStoreTests: XCTestCase {
 
         XCTAssertFalse(notifier.posted.map(\.identifier).contains("alarm.predictedLow"))
     }
+
+    @MainActor
+    func test_refreshDetectsOrphanedPairing() async throws {
+        let client = FixtureNightscoutClient()
+        let pairingStore = ClientPairingStore(service: "test.orphan.\(UUID().uuidString)")
+        defer { pairingStore.unpair() }
+        pairingStore.pair(MasterPairing(masterInstallId: "m1", clientId: "not-in-roster", secretHex: "aabbcc"))
+        client.settingsByIdentifier[NightscoutSettingsIdentifier.cold] = "settings_aaps_authorized_clients_missing"
+        let store = AppStore(client: client, alarmEngine: AlarmEngineLive(), clientPairingStore: pairingStore)
+
+        try await store.refresh()
+
+        XCTAssertEqual(store.clientControlAuthorized, false)
+    }
+
+    @MainActor
+    func test_refreshKeepsAuthorizedWhenOwnIdInRoster() async throws {
+        let client = FixtureNightscoutClient()
+        let pairingStore = ClientPairingStore(service: "test.orphan.\(UUID().uuidString)")
+        defer { pairingStore.unpair() }
+        pairingStore.pair(MasterPairing(masterInstallId: "m1", clientId: "abc", secretHex: "aabbcc"))
+        let store = AppStore(client: client, alarmEngine: AlarmEngineLive(), clientPairingStore: pairingStore)
+
+        try await store.refresh()
+
+        XCTAssertEqual(store.clientControlAuthorized, true)
+    }
 }
 
 private final class UnconfiguredTestClient: NightscoutClient {

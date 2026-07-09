@@ -1,0 +1,37 @@
+{
+  "status": 200,
+  "result": {
+    "_id": "aaps",
+    "identifier": "aaps",
+    "date": 946684800001,
+    "utcOffset": 0,
+    "app": "AAPS",
+    "schemaVersion": 1,
+    "srvModified": 9999999999999,
+    "runningConfig": {
+      "pump": "Dana-i",
+      "version": "4.3.0",
+      "isFakingTempsByExtendedBoluses": false,
+      "syncedPrefs": {
+        "NsClientAcceptProfileStore": "true",
+        "NsClientAcceptProfileSwitch": "true",
+        "NsClientAcceptTempTarget": "true",
+        "NsClientAcceptCarbs": "true",
+        "NsClientAcceptTherapyEvent": "true",
+        "NsClientAcceptRunningMode": "false",
+        "NsClientAcceptTbrEb": "true",
+        "NsClientAllowClientControl": "false",
+        "NsClient3UseWs": "true",
+        "ActivePluginAps": "OpenAPSAMA",
+        "ActivePluginSensitivity": "Autosens",
+        "ActivePluginSmoothing": "NoSmoothing",
+        "TempTargetPresets": "[{\"name\":\"Eating Soon\",\"targetMgdl\":90,\"durationMin\":45}]",
+        "QuickWizard": "[{\"name\":\"Breakfast\"}]",
+        "SceneDefinitions": "[{\"sceneId\":\"school-sport\",\"name\":\"School Sport\"}]"
+      },
+      "authorizedClients": {
+        "clientIds": ["some-other-client"]
+      }
+    }
+  }
+}
