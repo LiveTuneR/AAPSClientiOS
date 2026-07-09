@@ -105,6 +105,30 @@ enum ClientControlMessage {
         let profileName: String?
         static let type = "wizard_prepare"
     }
+
+    /// Asks the master to PREPARE activating the named scene — validated + parked, returns a
+    /// `BolusPreview` in the signed ack. Nothing activates until a matching `SceneCommit`.
+    /// `durationMinutes: nil` uses the scene's own stored default duration.
+    struct ScenePrepare: Codable {
+        let sceneId: String
+        let durationMinutes: Int?
+        static let type = "scene_prepare"
+    }
+
+    /// Confirms a prepared scene: the master activates the parked scene matching `bolusId` exactly
+    /// once (a re-sent commit safely no-ops on an already-consumed id).
+    struct SceneCommit: Codable {
+        let bolusId: Int64
+        static let type = "scene_commit"
+    }
+
+    /// Deactivates whatever scene is currently active. `triggerChain: true` mirrors the master's own
+    /// "Skip to <chain target>" — the master resolves the chain target FRESH at receipt time using
+    /// its own current config, so a stale client view can never trigger an unintended scene.
+    struct SceneStop: Codable {
+        var triggerChain: Bool = false
+        static let type = "scene_stop"
+    }
 }
 
 /// The master's computed preview for any two-step prepare→commit action (scene/wizard/bolus/batch),

@@ -43,6 +43,36 @@ final class ClientControlPublisher {
         )
     }
 
+    @discardableResult
+    func sendScenePrepare(sceneId: String, durationMinutes: Int?) async throws -> Int64 {
+        try await send(
+            type: ClientControlMessage.ScenePrepare.type,
+            payload: ClientControlMessage.ScenePrepare(sceneId: sceneId, durationMinutes: durationMinutes),
+            identifierPrefix: "aaps_clientcontrol_cmd_scene_prepare_",
+            wantsAck: true
+        )
+    }
+
+    @discardableResult
+    func sendSceneCommit(bolusId: Int64) async throws -> Int64 {
+        try await send(
+            type: ClientControlMessage.SceneCommit.type,
+            payload: ClientControlMessage.SceneCommit(bolusId: bolusId),
+            identifierPrefix: "aaps_clientcontrol_cmd_scene_commit_",
+            wantsAck: true
+        )
+    }
+
+    @discardableResult
+    func sendSceneStop(triggerChain: Bool) async throws -> Int64 {
+        try await send(
+            type: ClientControlMessage.SceneStop.type,
+            payload: ClientControlMessage.SceneStop(triggerChain: triggerChain),
+            identifierPrefix: "aaps_clientcontrol_cmd_scene_stop_",
+            wantsAck: true
+        )
+    }
+
     /// Result of checking the master's `aaps_clientcontrol_ack_<clientId>` document against a
     /// specific command counter this client sent with `wantsAck: true`.
     enum AckResult: Equatable {

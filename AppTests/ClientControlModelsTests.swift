@@ -86,4 +86,19 @@ final class ClientControlModelsTests: XCTestCase {
         XCTAssertEqual(json["useTrend"] as? Bool, false)
         XCTAssertNil(json["profileName"] as? String)
     }
+
+    func test_scenePrepareEncodesSceneIdAndDuration() throws {
+        let msg = ClientControlMessage.ScenePrepare(sceneId: "abc", durationMinutes: 30)
+        let data = try JSONEncoder().encode(msg)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        XCTAssertEqual(json["sceneId"] as? String, "abc")
+        XCTAssertEqual(json["durationMinutes"] as? Int, 30)
+    }
+
+    func test_sceneCommitEncodesBolusId() throws {
+        let msg = ClientControlMessage.SceneCommit(bolusId: 999)
+        let data = try JSONEncoder().encode(msg)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        XCTAssertEqual(json["bolusId"] as? Int64, 999)
+    }
 }

@@ -236,6 +236,12 @@ struct SettingsView: View {
                 Text("Bolus Calculator (Client Control)")
             }
 
+            NavigationLink {
+                SceneRemoteControlView(store: store)
+            } label: {
+                Text("Scenes (Client Control)")
+            }
+
             if #available(iOS 16.1, *) {
                 Section {
                     Toggle(String(localized: "settings.live_activity"), isOn: $liveActivityOn)
