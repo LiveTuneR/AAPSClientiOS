@@ -161,3 +161,5 @@
 "remote.scene_definitions" = "Определения сцен";
 "remote.quickwizard" = "QuickWizard";
 "remote.quickwizard_no_details" = "Без дополнительных деталей";
+"clientcontrol.orphaned_title" = "Привязка отозвана";
+"clientcontrol.orphaned_message" = "Это устройство больше не входит в список авторизованных клиентов мастера. Отвяжите и привяжите заново с новым PIN, если это неожиданно.";

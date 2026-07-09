@@ -161,3 +161,5 @@
 "remote.scene_definitions" = "Scene Definitions";
 "remote.quickwizard" = "QuickWizard";
 "remote.quickwizard_no_details" = "No extra details";
+"clientcontrol.orphaned_title" = "Pairing revoked";
+"clientcontrol.orphaned_message" = "This device is no longer in the master's Authorized Clients list. Unpair and re-pair with a new PIN if this is unexpected.";

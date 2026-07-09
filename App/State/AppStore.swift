@@ -28,6 +28,7 @@ enum RefreshError: LocalizedError {
     @Published var remoteConfigHot: NsRunningConfigHot?
     @Published var remoteCapabilities: NsRemoteCapabilities?
     @Published var remoteConfigError: String?
+    @Published var clientControlAuthorized: Bool = true
 
     var activeProfileSwitch: Treatment? {
         (careEvents + treatments)
@@ -40,6 +41,7 @@ enum RefreshError: LocalizedError {
     }
 
     let alarmEngine: AlarmEngine
+    let clientPairingStore: ClientPairingStore
     private let notifier: Notifier
     private var _client: NightscoutClient
     private let clientLock = NSLock()
@@ -161,12 +163,14 @@ enum RefreshError: LocalizedError {
     init(
         client: NightscoutClient,
         alarmEngine: AlarmEngine,
+        clientPairingStore: ClientPairingStore = ClientPairingStore(),
         sharedStore: SharedStore = SharedStore(),
         glucoseNotificationPublisher: GlucoseNotificationPublishing = DummyGlucoseNotificationPublisher(),
         notifier: Notifier = UNNotifier()
     ) {
         self._client = client
         self.alarmEngine = alarmEngine
+        self.clientPairingStore = clientPairingStore
         self.sharedStore = sharedStore
         self.glucoseNotificationPublisher = glucoseNotificationPublisher
         self.notifier = notifier
@@ -347,6 +351,22 @@ enum RefreshError: LocalizedError {
             let cold = try await client.fetchRunningConfigCold()
             remoteConfigCold = cold
             remoteCapabilities = cold?.remoteCapabilities
+            if let pairing = clientPairingStore.currentPairing() {
+                let pairedAtMs = clientPairingStore.pairedAt().map { Int64($0.timeIntervalSince1970 * 1000) } ?? 0
+                let docSrvModifiedMs = cold?.srvModified.map { Int64($0.timeIntervalSince1970 * 1000) } ?? 0
+                let verdict = OrphanDetector.evaluate(
+                    ownClientId: pairing.clientId,
+                    roster: cold?.authorizedClientIds,
+                    docSrvModifiedMs: docSrvModifiedMs,
+                    pairedAtMs: pairedAtMs,
+                    nowMs: Int64(Date().timeIntervalSince1970 * 1000)
+                )
+                switch verdict {
+                case .authorized: clientControlAuthorized = true
+                case .orphaned: clientControlAuthorized = false
+                case .noSignal, .deferred: break // keep prior state, no new evidence either way
+                }
+            }
         } catch is CancellationError { return }
         catch {
             rememberRemoteConfigError(error)

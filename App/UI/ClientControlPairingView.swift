@@ -45,6 +45,16 @@ struct ClientControlPairingView: View {
                 }
             }
 
+            if pairingStore.currentPairing() != nil, !store.clientControlAuthorized {
+                Section {
+                    Label(String(localized: "clientcontrol.orphaned_title"), systemImage: "exclamationmark.triangle.fill")
+                        .foregroundColor(.red)
+                    Text(String(localized: "clientcontrol.orphaned_message"))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+
             if let statusText {
                 Section {
                     Text(statusText)
