@@ -277,6 +277,21 @@ struct SettingsView: View {
             } footer: {
                 Text(String(localized: "settings.iaps_master_mode_caption"))
             }
+
+            Section {
+                Picker("settings.keepalive_mode", selection: Binding(
+                    get: { store.keepAliveMode },
+                    set: { store.setKeepAliveMode($0) }
+                )) {
+                    Text("settings.keepalive_disabled").tag(KeepAliveMode.disabled)
+                    Text("settings.keepalive_normal").tag(KeepAliveMode.normal)
+                    Text("settings.keepalive_aggressive").tag(KeepAliveMode.aggressive)
+                }
+            } header: {
+                Text("settings.keepalive")
+            } footer: {
+                Text(String(localized: "settings.keepalive_caption"))
+            }
         }
         .navigationTitle("settings.title")
         .onAppear { loadSettings() }

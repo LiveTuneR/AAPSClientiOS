@@ -165,3 +165,9 @@
 "remote.quickwizard_no_details" = "No extra details";
 "clientcontrol.orphaned_title" = "Pairing revoked";
 "clientcontrol.orphaned_message" = "This device is no longer in the master's Authorized Clients list. Unpair and re-pair with a new PIN if this is unexpected.";
+"settings.keepalive" = "Background Updates";
+"settings.keepalive_mode" = "Mode";
+"settings.keepalive_disabled" = "Off";
+"settings.keepalive_normal" = "Normal";
+"settings.keepalive_aggressive" = "Aggressive";
+"settings.keepalive_caption" = "Normal polls in step with the sensor, about once every five minutes. Aggressive polls every minute for the freshest data and uses noticeably more battery. Off stops background updates entirely; data refreshes only when you open the app.";

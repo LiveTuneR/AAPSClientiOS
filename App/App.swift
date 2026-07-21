@@ -9,7 +9,8 @@ struct AAPSClientApp: App {
     @Environment(\.scenePhase) private var scenePhase
     private let writer: NsTreatmentWriter
     private let bgScheduler: BackgroundScheduler
-    private let keepAlive = AudioKeepAlive()
+    private let keepAlive: AudioKeepAlive
+    private let backgroundTick = BackgroundTickCoordinator()
 
     init() {
         // Credentials live on the shared keychain group so the widget can read
@@ -43,7 +44,13 @@ struct AAPSClientApp: App {
         )
         _store = StateObject(wrappedValue: store)
         writer = NsTreatmentWriterLive(clientProvider: { [store] in store.client })
-        bgScheduler = BackgroundScheduler(store: store)
+        // Built locally first so the scheduler's onWake closure can capture it
+        // without touching `self`, which is not yet fully initialized here.
+        let keepAlive = AudioKeepAlive()
+        self.keepAlive = keepAlive
+        // A BGAppRefresh wake-up is the only way back if the audio keep-alive
+        // died while the process was suspended.
+        bgScheduler = BackgroundScheduler(store: store, onWake: { keepAlive.ensurePlaying() })
         // BGTaskScheduler launch handlers MUST be registered before the app finishes
         // launching. Registering from a SwiftUI `.task` (post-launch) throws an
         // uncaught NSException ("All launch handlers must be registered before
@@ -84,6 +91,7 @@ struct AAPSClientApp: App {
                 // scene is already `.active` by the time it mounts — so that handler's
                 // `.active` case never fires and the 60 s timer never starts until the user
                 // backgrounds/foregrounds the app at least once.
+                backgroundTick.resetMisses()
                 keepAlive.enterForeground { Task { await store.refreshIfStale() } }
             }
             .onChange(of: scenePhase) { phase in
@@ -91,9 +99,20 @@ struct AAPSClientApp: App {
                 case .active:
                     // Fast foreground polling; refreshIfStale() no-ops within 60 s
                     // so this stays cheap while keeping the open app + Live Activity live.
+                    backgroundTick.resetMisses()
                     keepAlive.enterForeground { Task { await store.refreshIfStale() } }
                 case .background:
-                    keepAlive.enterBackground { Task { try? await store.refresh() } }
+                    bgScheduler.schedule()
+                    keepAlive.enterBackground(
+                        mode: store.keepAliveMode,
+                        nextDelay: {
+                            backgroundTick.nextDelay(
+                                mode: store.keepAliveMode,
+                                lastReadingDate: store.readings.first?.date
+                            )
+                        },
+                        onTick: { Task { await backgroundTick.tick(store: store) } }
+                    )
                 default:
                     break
                 }

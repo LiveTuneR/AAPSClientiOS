@@ -69,4 +69,79 @@ final class BackgroundSchedulerTests: XCTestCase {
 
         XCTAssertEqual(spy.submittedRequests.map(\.identifier), [BackgroundScheduler.refreshTaskId])
     }
+
+    @MainActor
+    func test_schedule_isIdempotentAndResubmits() {
+        let spy = SpyTaskScheduler()
+        let scheduler = BackgroundScheduler(store: makeStore(), scheduler: spy, isRunningOnMac: false)
+
+        scheduler.schedule()
+        scheduler.schedule()
+
+        XCTAssertEqual(spy.submittedRequests.count, 2)
+        XCTAssertEqual(
+            Set(spy.submittedRequests.map(\.identifier)),
+            [BackgroundScheduler.refreshTaskId]
+        )
+    }
+
+    // A BGAppRefresh wake-up is the only thing that can reach the app after the
+    // audio keep-alive died and the process was suspended. If it refreshes data
+    // but leaves the keep-alive dead, the app just goes back to sleep and stays
+    // dead until the user opens it by hand.
+    @MainActor
+    func test_backgroundRefresh_revivesTheKeepAlive() async {
+        var revived = false
+        let scheduler = BackgroundScheduler(
+            store: makeStore(),
+            scheduler: SpyTaskScheduler(),
+            isRunningOnMac: false,
+            onWake: { revived = true }
+        )
+
+        _ = await scheduler.performBackgroundRefresh()
+
+        XCTAssertTrue(revived)
+    }
+
+    @MainActor
+    func test_backgroundRefresh_reportsSuccess_whenRefreshSucceeds() async {
+        let scheduler = BackgroundScheduler(
+            store: makeStore(),
+            scheduler: SpyTaskScheduler(),
+            isRunningOnMac: false
+        )
+
+        let ok = await scheduler.performBackgroundRefresh()
+
+        XCTAssertTrue(ok)
+    }
+
+    @MainActor
+    func test_backgroundRefresh_reportsFailure_whenRefreshThrows() async {
+        let client = FixtureNightscoutClient()
+        client.shouldThrow = NsError.noNetwork
+        let store = AppStore(client: client, alarmEngine: AlarmEngineLive())
+        let scheduler = BackgroundScheduler(
+            store: store,
+            scheduler: SpyTaskScheduler(),
+            isRunningOnMac: false
+        )
+
+        let ok = await scheduler.performBackgroundRefresh()
+
+        XCTAssertFalse(ok)
+    }
+
+    @MainActor
+    func test_scheduledRequestIsNotEarlierThanFiveMinutes() throws {
+        let spy = SpyTaskScheduler()
+        let scheduler = BackgroundScheduler(store: makeStore(), scheduler: spy, isRunningOnMac: false)
+
+        scheduler.schedule()
+
+        let request = try XCTUnwrap(spy.submittedRequests.first as? BGAppRefreshTaskRequest)
+        let earliest = try XCTUnwrap(request.earliestBeginDate)
+        XCTAssertGreaterThan(earliest.timeIntervalSinceNow, 4 * 60)
+    }
 }

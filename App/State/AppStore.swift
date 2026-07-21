@@ -12,6 +12,12 @@ enum RefreshError: LocalizedError {
     }
 }
 
+/// How much of Nightscout to fetch.
+enum RefreshScope {
+    case full
+    case light
+}
+
 @MainActor final class AppStore: ObservableObject {
     @Published var readings: [GlucoseReading] = []
     @Published var treatments: [Treatment] = []
@@ -22,6 +28,7 @@ enum RefreshError: LocalizedError {
     @Published var thresholds: AlarmThresholds
     @Published var consumableThresholds: ConsumableThresholds
     @Published var displayUnits: GlucoseUnits = .mgdl
+    @Published var keepAliveMode: KeepAliveMode = .normal
     @Published var careEvents: [Treatment] = []
     @Published var deviceStatusHistory: [DeviceStatusEntry] = []
     @Published var remoteConfigCold: NsRunningConfigCold?
@@ -50,6 +57,9 @@ enum RefreshError: LocalizedError {
         set { clientLock.lock(); _client = newValue; clientLock.unlock() }
     }
     private(set) var lastRefresh = Date.distantPast
+    /// Three hours of entries: enough for alarms, widget and Live Activity.
+    static let lightEntriesLimit = 36
+    private(set) var lastLightRefresh = Date.distantPast
     private let sharedStore: SharedStore
     private let glucoseNotificationPublisher: GlucoseNotificationPublishing
     private var lastPushedReadingDate: Date?
@@ -62,6 +72,7 @@ enum RefreshError: LocalizedError {
     static let glucoseNotificationEnabledKey = "notification.latestGlucose.enabled"
     static let announcementRelayEnabledKey = "announcementRelay.enabled"
     static let iapsMasterModeEnabledKey = "iapsMasterMode.enabled"
+    static let keepAliveModeKey = "background.keepAliveMode"
 
     var isGlucoseNotificationEnabled: Bool {
         UserDefaults.standard.bool(forKey: Self.glucoseNotificationEnabledKey)
@@ -186,6 +197,7 @@ enum RefreshError: LocalizedError {
         self.thresholds = Self.loadThresholds()
         self.consumableThresholds = Self.loadConsumableThresholds()
         self.displayUnits = Self.loadDisplayUnits()
+        self.keepAliveMode = Self.loadKeepAliveMode()
         ensureConfigured()
     }
 
@@ -220,6 +232,16 @@ enum RefreshError: LocalizedError {
         UserDefaults.standard.set(units.rawValue, forKey: "display.glucoseUnits")
         // Force a push: the reading is unchanged but the rendered units differ.
         updateSharedSnapshot(force: true)
+    }
+
+    func setKeepAliveMode(_ mode: KeepAliveMode) {
+        keepAliveMode = mode
+        UserDefaults.standard.set(mode.rawValue, forKey: Self.keepAliveModeKey)
+    }
+
+    private static func loadKeepAliveMode() -> KeepAliveMode {
+        let raw = UserDefaults.standard.string(forKey: Self.keepAliveModeKey) ?? ""
+        return KeepAliveMode(rawValue: raw) ?? .normal
     }
 
     private static func loadDisplayUnits() -> GlucoseUnits {
@@ -311,8 +333,53 @@ enum RefreshError: LocalizedError {
         }
     }
 
-    func refresh() async throws {
+    func refresh(scope: RefreshScope = .full) async throws {
         ensureConfigured()
+        switch scope {
+        case .full: try await refreshFull()
+        case .light: try await refreshLight()
+        }
+    }
+
+    private func refreshLight() async throws {
+        var firstError: Error?
+        var entriesOk = false
+
+        defer { if entriesOk { updateSharedSnapshot() } }
+
+        do {
+            let fresh = try await client.fetchEntries(limit: Self.lightEntriesLimit)
+            mergeReadings(fresh)
+            entriesOk = true
+        } catch is CancellationError { return }
+        catch { firstError = RefreshError.stage("entries", error) }
+
+        do {
+            loopStatus = try await client.fetchDeviceStatus()
+        } catch is CancellationError { return }
+        catch { firstError = firstError ?? RefreshError.stage("devicestatus", error) }
+
+        connectionLost = firstError != nil
+        if entriesOk {
+            lastLightRefresh = Date()
+        }
+
+        evaluateAlarms()
+
+        if let firstError {
+            alarmEngine.schedule(.connectionLost)
+            throw firstError
+        }
+    }
+
+    private func mergeReadings(_ fresh: [GlucoseReading]) {
+        var byDate: [Date: GlucoseReading] = [:]
+        for reading in readings { byDate[reading.date] = reading }
+        for reading in fresh { byDate[reading.date] = reading }
+        readings = Array(byDate.values.sorted { $0.date > $1.date }.prefix(288))
+    }
+
+    private func refreshFull() async throws {
         var firstError: Error?
         var entriesOk = false
 
@@ -393,10 +460,28 @@ enum RefreshError: LocalizedError {
             lastRefresh = Date()
         }
 
+        evaluateAlarms()
+
+        // Snapshot mirroring runs via the `defer` above on every exit path.
+        if let firstError {
+            alarmEngine.schedule(.connectionLost)
+            throw firstError
+        }
+    }
+
+    private func evaluateAlarms() {
+        // Either scope proves the connection is alive, so both count here. Using
+        // `lastRefresh` alone would make every background light refresh look
+        // stale, and the stale branch in `AlarmEngineLive.evaluate` returns
+        // `.noData` before it ever compares glucose against the thresholds —
+        // false "No Data" alarms plus real low/high alarms never firing in the
+        // background. `isStale` deliberately still tracks only `lastRefresh`,
+        // because only a full refresh may satisfy `refreshIfStale()`.
+        let lastSuccessfulUpdate = max(lastRefresh, lastLightRefresh)
         if let reading = readings.first,
            let alarm = alarmEngine.evaluate(
                latest: reading,
-               lastUpdate: lastRefresh,
+               lastUpdate: lastSuccessfulUpdate,
                now: Date(),
                thresholds: thresholds
            ), alarm != .connectionLost {
@@ -410,12 +495,6 @@ enum RefreshError: LocalizedError {
                now: Date()
            ) {
             alarmEngine.schedule(predictedAlarm)
-        }
-
-        // Snapshot mirroring runs via the `defer` above on every exit path.
-        if let firstError {
-            alarmEngine.schedule(.connectionLost)
-            throw firstError
         }
     }
 

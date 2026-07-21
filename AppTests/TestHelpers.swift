@@ -17,7 +17,7 @@ final class MockAuthTransport: HttpTransport {
     }
 }
 
-final class FixtureNightscoutClient: NightscoutClient {
+class FixtureNightscoutClient: NightscoutClient {
     var postedPayloads: [[String: Any]] = []
     var putSettingsCalls: [(identifier: String, document: [String: Any])] = []
     var settingsSearchResults: [NsSettingsDocument] = []
