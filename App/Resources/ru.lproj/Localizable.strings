@@ -1,4 +1,6 @@
 "app.title" = "AAPSClient";
+"alarm.snooze_duration" = "%d мин";
+"alarm.snooze_action" = "Сбросить";
 "home.no_data" = "--";
 "home.offline" = "НЕТ СВЯЗИ";
 "home.iob" = "IOB: %@ Ед";

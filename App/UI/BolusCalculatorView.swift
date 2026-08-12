@@ -113,6 +113,8 @@ struct BolusCalculatorView: View {
                         statusText = "No response from master yet — try again."
                     case .invalidSignature:
                         statusText = "Ack signature did not verify — rejected."
+                    case .staleTimestamp:
+                        statusText = "Ack timestamp is too far from device clock — rejected."
                     }
                 }
             } catch {

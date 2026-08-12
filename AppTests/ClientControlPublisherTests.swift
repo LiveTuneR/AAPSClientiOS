@@ -130,6 +130,30 @@ final class ClientControlPublisherTests: XCTestCase {
         XCTAssertEqual(result, .invalidSignature)
     }
 
+    func test_fetchAckRejectsTimestampOutsideSkewWindow() async throws {
+        let mock = FixtureNightscoutClient()
+        let secret = ClientControlCrypto.newSecretBytes()
+        let store = ClientPairingStore(service: "test.\(UUID().uuidString)")
+        defer { store.unpair() }
+        store.pair(MasterPairing(masterInstallId: "m1", clientId: "c1", secretHex: ClientControlCrypto.bytesToHex(secret)))
+        let publisher = ClientControlPublisher(client: mock, pairingStore: store)
+
+        // Signature is otherwise valid, but the ack was (supposedly) written 20 minutes ago —
+        // well outside the 5-minute default skew window `timestampWithinSkew` enforces.
+        let staleTimestamp = Int64(Date().addingTimeInterval(-20 * 60).timeIntervalSince1970 * 1000)
+        var ack = AckEnvelope(clientId: "c1", commandCounter: 1, phase: .done, status: .ok, reason: nil, payload: nil, timestamp: staleTimestamp, signature: "")
+        ack.signature = ClientControlCrypto.sign(secret: secret, canonical: ack.canonicalString())
+        let ackData = try JSONEncoder().encode(ack)
+        let ackJson = try JSONSerialization.jsonObject(with: ackData) as! [String: Any]
+        mock.settingsDocumentOverride["aaps_clientcontrol_ack_c1"] = try NsMapping.settingsDocument(
+            from: JSONSerialization.data(withJSONObject: ["status": 200, "result": ["identifier": "aaps_clientcontrol_ack_c1", "date": 1, "utcOffset": 0, "app": "AAPS", "schemaVersion": 1, "ack": ackJson]]),
+            identifier: "aaps_clientcontrol_ack_c1"
+        )
+
+        let result = try await publisher.fetchAck(expectedCounter: 1)
+        XCTAssertEqual(result, .staleTimestamp)
+    }
+
     func test_fetchAckIgnoresStaleCounter() async throws {
         let mock = FixtureNightscoutClient()
         let secret = ClientControlCrypto.newSecretBytes()

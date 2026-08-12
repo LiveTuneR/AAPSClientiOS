@@ -130,6 +130,53 @@ final class AppStoreTests: XCTestCase {
         XCTAssertEqual(result, .noData)
     }
 
+    func test_activeAlarmsPopulatedOnThresholdBreach_andSnoozeClearsThem() async throws {
+        let mockClient = FixtureNightscoutClient()
+        let engine = AlarmEngineLive()
+        let store = AppStore(client: mockClient, alarmEngine: engine)
+        // Fixture entries are 120 mg/dl; set `high` below that so the refresh trips it.
+        store.thresholds = AlarmThresholds(urgentLow: 55, low: 70, high: 100, urgentHigh: 250, staleMinutes: 15)
+
+        try await store.refresh()
+
+        XCTAssertEqual(store.activeAlarms, [.high])
+
+        store.snoozeAlarms(store.activeAlarms, minutes: 30)
+
+        XCTAssertTrue(store.activeAlarms.isEmpty)
+        XCTAssertTrue(engine.isSnoozed(.high, now: Date()))
+        XCTAssertFalse(engine.isSnoozed(.high, now: Date().addingTimeInterval(31 * 60)))
+    }
+
+    func test_connectionLostTracksActiveAlarms_andRespectsSnooze() async throws {
+        let mockClient = FixtureNightscoutClient()
+        let notifier = MockNotifier()
+        let engine = AlarmEngineLive(notifier: notifier)
+        let store = AppStore(client: mockClient, alarmEngine: engine)
+
+        try await store.refresh()
+        mockClient.shouldThrow = NsError.noNetwork
+
+        do {
+            try await store.refresh()
+            XCTFail("Expected error")
+        } catch {}
+
+        XCTAssertEqual(store.activeAlarms, [.connectionLost])
+
+        store.snoozeAlarms([.connectionLost], minutes: 15)
+        XCTAssertTrue(store.activeAlarms.isEmpty)
+
+        notifier.posted.removeAll()
+        do {
+            try await store.refresh()
+            XCTFail("Expected error")
+        } catch {}
+
+        XCTAssertTrue(notifier.posted.isEmpty, "snoozed connectionLost should not repost a notification")
+        XCTAssertTrue(store.activeAlarms.isEmpty, "snoozed connectionLost should not reappear in activeAlarms")
+    }
+
     func test_thresholdsPersistInUserDefaults() async throws {
         let mockClient = FixtureNightscoutClient()
         let engine = AlarmEngineLive()

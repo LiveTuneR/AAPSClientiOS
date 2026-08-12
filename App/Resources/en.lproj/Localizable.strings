@@ -1,4 +1,6 @@
 "app.title" = "AAPSClient";
+"alarm.snooze_duration" = "%d min";
+"alarm.snooze_action" = "Snooze";
 "home.no_data" = "--";
 "home.offline" = "OFFLINE";
 "home.iob" = "IOB: %@ U";

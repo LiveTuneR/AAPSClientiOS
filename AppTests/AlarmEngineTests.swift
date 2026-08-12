@@ -99,6 +99,23 @@ final class AlarmEngineTests: XCTestCase {
         XCTAssertNil(result)
     }
 
+    func test_isSnoozedTrueBeforeExpiry() {
+        let engine = AlarmEngineLive()
+        engine.snooze(.low, until: Date().addingTimeInterval(900))
+        XCTAssertTrue(engine.isSnoozed(.low, now: Date()))
+    }
+
+    func test_isSnoozedFalseAfterExpiry() {
+        let engine = AlarmEngineLive()
+        engine.snooze(.low, until: Date().addingTimeInterval(900))
+        XCTAssertFalse(engine.isSnoozed(.low, now: Date().addingTimeInterval(901)))
+    }
+
+    func test_isSnoozedFalseWhenNeverSnoozed() {
+        let engine = AlarmEngineLive()
+        XCTAssertFalse(engine.isSnoozed(.urgentHigh, now: .now))
+    }
+
     func test_predictedLowRespectsSnooze() {
         let engine = AlarmEngineLive()
         let futureDate = Date().addingTimeInterval(600)

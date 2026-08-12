@@ -144,6 +144,7 @@ struct ClientControlPairingView: View {
         switch result {
         case .pending: return "Ping sent, no ack yet."
         case .invalidSignature: return "Ack received but signature did not verify — rejected."
+        case .staleTimestamp: return "Ack received but its timestamp is too far from device clock — rejected."
         case .terminal(.ok, _, _): return "Ping acknowledged by master."
         case .terminal(let status, let reason, _): return "Ping \(status.rawValue.lowercased())\(reason.map { ": \($0)" } ?? "")."
         }

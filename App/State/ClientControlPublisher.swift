@@ -85,6 +85,10 @@ final class ClientControlPublisher {
         /// A doc for this counter exists but the HMAC signature doesn't verify against our shared
         /// secret — reject it rather than trust an unverifiable "Ok". Never silently treat as success.
         case invalidSignature
+        /// Signature verifies, but `ack.timestamp` falls outside the allowed clock-skew window —
+        /// e.g. a stale ack doc served from a cache, or a master with a badly wrong clock. Reject
+        /// rather than trust a terminal outcome we can't date.
+        case staleTimestamp
     }
 
     /// Fetches and verifies the ack for a command sent with counter `expectedCounter`. Mirrors the
@@ -105,6 +109,10 @@ final class ClientControlPublisher {
         }
         guard ClientControlCrypto.verify(secret: secret, canonical: ack.canonicalString(), signature: ack.signature) else {
             return .invalidSignature
+        }
+        let ackDate = Date(timeIntervalSince1970: Double(ack.timestamp) / 1000)
+        guard ClientControlCrypto.timestampWithinSkew(ackDate, now: Date()) else {
+            return .staleTimestamp
         }
         if ack.phase == .executing {
             return .pending

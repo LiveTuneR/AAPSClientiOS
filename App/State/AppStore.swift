@@ -25,6 +25,7 @@ enum RefreshScope {
     @Published var profile: NsProfile?
     @Published var profileStore: NsProfileStore? = nil
     @Published var connectionLost = false
+    @Published private(set) var activeAlarms: [AlarmType] = []
     @Published var thresholds: AlarmThresholds
     @Published var consumableThresholds: ConsumableThresholds
     @Published var displayUnits: GlucoseUnits = .mgdl
@@ -464,7 +465,12 @@ enum RefreshScope {
 
         // Snapshot mirroring runs via the `defer` above on every exit path.
         if let firstError {
-            alarmEngine.schedule(.connectionLost)
+            if !alarmEngine.isSnoozed(.connectionLost, now: Date()) {
+                alarmEngine.schedule(.connectionLost)
+                if !activeAlarms.contains(.connectionLost) {
+                    activeAlarms.append(.connectionLost)
+                }
+            }
             throw firstError
         }
     }
@@ -478,6 +484,8 @@ enum RefreshScope {
         // background. `isStale` deliberately still tracks only `lastRefresh`,
         // because only a full refresh may satisfy `refreshIfStale()`.
         let lastSuccessfulUpdate = max(lastRefresh, lastLightRefresh)
+        var active: [AlarmType] = []
+
         if let reading = readings.first,
            let alarm = alarmEngine.evaluate(
                latest: reading,
@@ -486,6 +494,7 @@ enum RefreshScope {
                thresholds: thresholds
            ), alarm != .connectionLost {
             alarmEngine.schedule(alarm)
+            active.append(alarm)
         }
 
         if let minPredBg = loopStatus?.reason?.minPredBg,
@@ -495,7 +504,21 @@ enum RefreshScope {
                now: Date()
            ) {
             alarmEngine.schedule(predictedAlarm)
+            active.append(predictedAlarm)
         }
+
+        activeAlarms = active
+    }
+
+    /// Silences the given alarms for `minutes`, both in the engine (so they stop
+    /// re-firing notifications on the next refresh) and in `activeAlarms` (so the
+    /// in-app banner clears immediately rather than waiting for the next refresh).
+    func snoozeAlarms(_ types: [AlarmType], minutes: Int) {
+        let until = Date().addingTimeInterval(Double(minutes) * 60)
+        for type in types {
+            alarmEngine.snooze(type, until: until)
+        }
+        activeAlarms.removeAll { types.contains($0) }
     }
 
     /// Mirror the latest reading + display config into the App Group for the widget.

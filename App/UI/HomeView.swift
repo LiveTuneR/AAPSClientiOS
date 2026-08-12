@@ -38,6 +38,7 @@ struct HomeView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 12) {
+                AlarmBannerView(store: store)
                 StatusCardView(
                     store: store,
                     units: units,

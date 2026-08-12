@@ -5,6 +5,7 @@ protocol AlarmEngine {
     func evaluatePredictedLow(minPredBgMgdl: Int?, thresholdMgdl: Int, now: Date) -> AlarmType?
     func schedule(_ type: AlarmType)
     func snooze(_ type: AlarmType, until: Date)
+    func isSnoozed(_ type: AlarmType, now: Date) -> Bool
 }
 
 final class AlarmEngineLive: AlarmEngine {
@@ -56,14 +57,18 @@ final class AlarmEngineLive: AlarmEngine {
         return nonSnoozed(.predictedLow, now: now)
     }
 
-    private func nonSnoozed(_ type: AlarmType, now: Date) -> AlarmType? {
+    func isSnoozed(_ type: AlarmType, now: Date) -> Bool {
         lock.lock()
         let until = snoozed[type]
         lock.unlock()
         if let until, now < until {
-            return nil
+            return true
         }
-        return type
+        return false
+    }
+
+    private func nonSnoozed(_ type: AlarmType, now: Date) -> AlarmType? {
+        isSnoozed(type, now: now) ? nil : type
     }
 }
 
