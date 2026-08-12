@@ -42,6 +42,13 @@ final class ClientControlPublisherTests: XCTestCase {
         let doc = try XCTUnwrap(mock.putSettingsCalls.first?.document)
         let envelope = try XCTUnwrap(doc["envelope"] as? [String: Any])
         XCTAssertEqual(envelope["wantsAck"] as? Bool, true)
+        let payload = try XCTUnwrap(envelope["payload"] as? String)
+        let payloadObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(payload.utf8)) as? [String: Any]
+        )
+        XCTAssertEqual(payloadObject["type"] as? String, "ping")
+        XCTAssertEqual((envelope["validUntil"] as? Int64) ?? Int64(envelope["validUntil"] as? Int ?? 0),
+                       ((envelope["timestamp"] as? Int64) ?? Int64(envelope["timestamp"] as? Int ?? 0)) + ClientControlPublisher.pingTTL)
     }
 
     func test_fetchAckReturnsVerifiedEnvelopeOnMatchingCounter() async throws {
@@ -109,6 +116,36 @@ final class ClientControlPublisherTests: XCTestCase {
         XCTAssertEqual(call.identifier, "aaps_clientcontrol_cmd_scene_stop_c1")
         let envelope = try XCTUnwrap(call.document["envelope"] as? [String: Any])
         XCTAssertEqual(envelope["type"] as? String, "scene_stop")
+        XCTAssertEqual(envelope["wantsAck"] as? Bool, false)
+    }
+
+    func test_sendBatchPrepareIncludesKotlinDiscriminatorAndAction() async throws {
+        let mock = FixtureNightscoutClient()
+        let store = ClientPairingStore(service: "test.\(UUID().uuidString)")
+        defer { store.unpair() }
+        store.pair(MasterPairing(
+            masterInstallId: "m1", clientId: "c1",
+            secretHex: ClientControlCrypto.bytesToHex(ClientControlCrypto.newSecretBytes())
+        ))
+        let publisher = ClientControlPublisher(client: mock, pairingStore: store)
+        var action = BatchActionDto(type: .tempTarget)
+        action.reason = "ACTIVITY"
+        action.lowMgdl = 120
+        action.highMgdl = 120
+        action.durationMinutes = 60
+
+        try await publisher.sendBatchPrepare([action])
+
+        let call = try XCTUnwrap(mock.putSettingsCalls.first)
+        XCTAssertEqual(call.identifier, "aaps_clientcontrol_cmd_batch_prepare_c1")
+        XCTAssertEqual(call.document["date"] as? Int64, ClientControlPublisher.documentDate)
+        let envelope = try XCTUnwrap(call.document["envelope"] as? [String: Any])
+        let payload = try XCTUnwrap(envelope["payload"] as? String)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(payload.utf8)) as? [String: Any])
+        XCTAssertEqual(object["type"] as? String, "batch_prepare")
+        let actions = try XCTUnwrap(object["actions"] as? [[String: Any]])
+        XCTAssertEqual(actions.first?["type"] as? String, "temp_target")
+        XCTAssertEqual(actions.first?["durationMinutes"] as? Int, 60)
     }
 
     func test_fetchAckRejectsBadSignature() async throws {

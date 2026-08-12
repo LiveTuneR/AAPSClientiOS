@@ -129,6 +129,116 @@ enum ClientControlMessage {
         var triggerChain: Bool = false
         static let type = "scene_stop"
     }
+
+    struct PreferencesUpdate: Codable {
+        let prefs: [String: PrefEntry]
+        static let type = "preferences_update"
+    }
+
+    struct BolusPrepare: Codable {
+        let guid: String
+        static let type = "bolus_prepare"
+    }
+
+    struct BolusCommit: Codable {
+        let bolusId: Int64
+        var asAdvisor: Bool = false
+        var correctionU: Double = 0
+        static let type = "bolus_commit"
+    }
+
+    struct BatchPrepare: Codable {
+        let actions: [BatchActionDto]
+        static let type = "batch_prepare"
+    }
+
+    struct DismissAlarm: Codable {
+        static let type = "dismiss_alarm"
+    }
+
+    struct StopBolus: Codable {
+        static let type = "stop_bolus"
+    }
+}
+
+struct PrefEntry: Codable, Equatable {
+    let value: String
+    let lastModified: Int64
+}
+
+enum BatchActionType: String, Codable {
+    case bolus
+    case tempTarget = "temp_target"
+    case profileSwitch = "profile_switch"
+    case runningMode = "running_mode"
+    case tempBasal = "temp_basal"
+    case extendedBolus = "extended_bolus"
+    case cancelTempBasal = "cancel_temp_basal"
+    case cancelExtendedBolus = "cancel_extended_bolus"
+    case insulinActivate = "insulin_activate"
+    case therapyEvent = "therapy_event"
+    case therapyEventEdit = "therapy_event_edit"
+}
+
+/// Flat tagged union matching AndroidAPS `BatchActionDto`. The master validates which fields
+/// are meaningful for `type`; this client never treats local construction as authorization.
+struct BatchActionDto: Codable, Equatable {
+    let type: String
+    var insulin: Double = 0
+    var carbs: Int = 0
+    var carbsTimeOffsetMinutes: Int = 0
+    var carbsDurationHours: Int = 0
+    var recordOnly: Bool = false
+    var notes: String = ""
+    var timestamp: Int64 = 0
+    var iCfgJson: String? = nil
+    var reason: String? = nil
+    var lowMgdl: Double = 0
+    var highMgdl: Double = 0
+    var durationMinutes: Int = 0
+    var startOffsetMinutes: Int = 0
+    var percentage: Int = 0
+    var timeShiftHours: Int = 0
+    var profileName: String? = nil
+    var runningMode: String? = nil
+    var rate: Double = 0
+    var isPercent: Bool = false
+    var teType: String? = nil
+    var glucoseMgdl: Double? = nil
+    var meterType: String? = nil
+    var location: String? = nil
+    var arrow: String? = nil
+    var source: String? = nil
+    var eCarbsGrams: Int = 0
+    var eCarbsDelayMinutes: Int = 0
+    var eCarbsDurationHours: Int = 0
+    var quickWizardGuid: String? = nil
+
+    init(type: BatchActionType) {
+        self.type = type.rawValue
+    }
+}
+
+enum ProgressPhase: String, Codable {
+    case active = "Active"
+    case complete = "Complete"
+    case cleared = "Cleared"
+}
+
+struct ProgressEnvelope: Codable, Equatable {
+    let clientId: String
+    let phase: ProgressPhase
+    let insulin: Double
+    let percent: Int
+    let status: String
+    let delivered: Double
+    let stopDeliveryEnabled: Bool
+    let timestamp: Int64
+    var signature: String
+
+    func canonicalString() -> String {
+        "\(clientId)|\(phase.rawValue)|\(insulin)|\(percent)|\(status)|\(delivered)|\(stopDeliveryEnabled)|\(timestamp)"
+    }
 }
 
 /// The master's computed preview for any two-step prepare→commit action (scene/wizard/bolus/batch),

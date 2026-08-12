@@ -101,4 +101,25 @@ final class ClientControlModelsTests: XCTestCase {
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
         XCTAssertEqual(json["bolusId"] as? Int64, 999)
     }
+
+    func test_progressCanonicalStringMatchesAndroidApsFormat() {
+        let progress = ProgressEnvelope(
+            clientId: "c1", phase: .active, insulin: 1.25, percent: 40,
+            status: "Delivering", delivered: 0.5, stopDeliveryEnabled: true,
+            timestamp: 1_000, signature: ""
+        )
+        XCTAssertEqual(progress.canonicalString(), "c1|Active|1.25|40|Delivering|0.5|true|1000")
+    }
+
+    func test_bolusCommitEncodesNewCorrectionField() throws {
+        let message = ClientControlMessage.BolusCommit(
+            bolusId: 42, asAdvisor: true, correctionU: 0.75
+        )
+        let object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(message)) as? [String: Any]
+        )
+        XCTAssertEqual(object["bolusId"] as? Int64, 42)
+        XCTAssertEqual(object["asAdvisor"] as? Bool, true)
+        XCTAssertEqual(object["correctionU"] as? Double, 0.75)
+    }
 }

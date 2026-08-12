@@ -62,6 +62,7 @@ enum RefreshScope {
     static let lightEntriesLimit = 36
     private(set) var lastLightRefresh = Date.distantPast
     private let sharedStore: SharedStore
+    private let snapshotOutput: GlucoseSnapshotOutput
     private let glucoseNotificationPublisher: GlucoseNotificationPublishing
     private var lastPushedReadingDate: Date?
     private var lastNotifiedReadingDate: Date?
@@ -187,12 +188,14 @@ enum RefreshScope {
         clientPairingStore: ClientPairingStore = ClientPairingStore(),
         sharedStore: SharedStore = SharedStore(),
         glucoseNotificationPublisher: GlucoseNotificationPublishing = DummyGlucoseNotificationPublisher(),
-        notifier: Notifier = UNNotifier()
+        notifier: Notifier = UNNotifier(),
+        snapshotOutput: GlucoseSnapshotOutput? = nil
     ) {
         self._client = client
         self.alarmEngine = alarmEngine
         self.clientPairingStore = clientPairingStore
         self.sharedStore = sharedStore
+        self.snapshotOutput = snapshotOutput ?? GlucoseDeliveryCoordinator.shared
         self.glucoseNotificationPublisher = glucoseNotificationPublisher
         self.notifier = notifier
         self.thresholds = Self.loadThresholds()
@@ -543,9 +546,15 @@ enum RefreshScope {
                 iob: loopStatus?.iob, cob: loopStatus?.cob,
                 tempBasalRate: loopStatus?.tempBasalRate,
                 activeProfileName: activeProfileName,
-                activeProfilePercentage: activeProfileSwitch?.percentage
+                activeProfilePercentage: activeProfileSwitch?.percentage,
+                history: readings.prefix(144).map { GlucoseSample(mgdl: $0.mgdl, date: $0.date) }
             )
             sharedStore.saveSnapshot(snap)
+            snapshotOutput.publish(
+                snapshot: snap,
+                config: DisplayConfig(units: displayUnits, thresholds: thresholds),
+                force: force
+            )
 
             readingChanged = force || latest.date != lastPushedReadingDate
             if readingChanged {

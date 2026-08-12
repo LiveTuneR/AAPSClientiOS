@@ -56,6 +56,7 @@ struct AAPSClientApp: App {
         // uncaught NSException ("All launch handlers must be registered before
         // application finishes launching") on iOS 16/18 and Mac alike.
         bgScheduler.register()
+        GlucoseDeliveryCoordinator.shared.start()
     }
 
     var body: some Scene {

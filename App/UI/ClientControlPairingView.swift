@@ -126,7 +126,7 @@ struct ClientControlPairingView: View {
             do {
                 let counter = try await publisher.sendPing()
                 await MainActor.run { statusText = "Ping sent, waiting for ack..." }
-                for _ in 0..<5 {
+                for _ in 0..<12 {
                     try await Task.sleep(nanoseconds: 1_000_000_000)
                     let result = try await publisher.fetchAck(expectedCounter: counter)
                     if case .pending = result { continue }

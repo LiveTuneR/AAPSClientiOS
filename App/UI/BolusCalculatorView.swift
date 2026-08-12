@@ -15,13 +15,14 @@ struct BolusCalculatorView: View {
     @State private var isBusy = false
     @State private var statusText: String?
     @State private var preview: BolusPreview?
+    @State private var progress: ProgressEnvelope?
 
     private var isPaired: Bool { pairingStore.currentPairing() != nil }
 
     var body: some View {
         Form {
             Section {
-                Text("Shows what the master's bolus wizard would currently calculate. This is informational only — nothing is sent to the pump, and no confirmation step exists in this app for it.")
+                Text("The master calculates and validates the dose. Delivery requires a separate confirmation below.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -63,6 +64,25 @@ struct BolusCalculatorView: View {
                 if let preview {
                     Section("Master's Confirmation Text") {
                         ForEach(preview.lines, id: \.text) { Text($0.text) }
+                        Button("Confirm delivery") { commit(preview, asAdvisor: false) }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(isBusy || (preview.wizardDetail?.totalInsulin ?? 0) <= 0)
+                        if preview.advisorApplies {
+                            Button("Confirm correction only") { commit(preview, asAdvisor: true) }
+                                .disabled(isBusy)
+                        }
+                    }
+                }
+
+                if let progress {
+                    Section("Delivery") {
+                        ProgressView(value: Double(progress.percent), total: 100)
+                        LabeledContent("Status", value: progress.status)
+                        LabeledContent("Delivered", value: String(format: "%.2f U", progress.delivered))
+                        if progress.phase == .active, progress.stopDeliveryEnabled {
+                            Button("Stop delivery", role: .destructive) { stopDelivery() }
+                                .disabled(isBusy)
+                        }
                     }
                 }
             }
@@ -73,18 +93,19 @@ struct BolusCalculatorView: View {
         }
         .navigationTitle("Bolus Calculator")
         .onAppear {
-            if bgText.isEmpty, let last = store.readings.last {
-                bgText = String(last.mgdl)
+            if bgText.isEmpty, let latest = store.readings.first {
+                bgText = String(latest.mgdl)
             }
         }
     }
 
     private func calculate() {
         guard let carbs = Int(carbsText) else { return }
-        let bg = Double(bgText) ?? Double(store.readings.last?.mgdl ?? 0)
+        let bg = Double(bgText) ?? Double(store.readings.first?.mgdl ?? 0)
         isBusy = true
         statusText = "Calculating..."
         preview = nil
+        progress = nil
         Task {
             let publisher = ClientControlPublisher(client: store.client, pairingStore: pairingStore)
             let inputs = ClientControlMessage.WizardPrepare(
@@ -123,9 +144,107 @@ struct BolusCalculatorView: View {
         }
     }
 
+    private func commit(_ prepared: BolusPreview, asAdvisor: Bool) {
+        isBusy = true
+        statusText = "Sending confirmation..."
+        let startedAt = Int64(Date().timeIntervalSince1970 * 1_000)
+        Task {
+            let publisher = ClientControlPublisher(client: store.client, pairingStore: pairingStore)
+            do {
+                let counter = try await publisher.sendBolusCommit(
+                    bolusId: prepared.bolusId,
+                    asAdvisor: asAdvisor
+                )
+                let result = try await pollAck(publisher: publisher, counter: counter)
+                switch result {
+                case .terminal(.ok, _, _):
+                    await MainActor.run {
+                        statusText = "Accepted by master; waiting for pump delivery confirmation."
+                    }
+                    await monitorProgress(publisher: publisher, notBefore: startedAt - 5_000)
+                case .terminal(let status, let reason, _):
+                    await MainActor.run {
+                        isBusy = false
+                        statusText = "Delivery \(status.rawValue.lowercased())\(reason.map { ": \($0)" } ?? "")."
+                    }
+                case .pending:
+                    await MainActor.run {
+                        isBusy = false
+                        statusText = "Delivery state is unconfirmed. Check the master before retrying."
+                    }
+                case .invalidSignature:
+                    await MainActor.run {
+                        isBusy = false
+                        statusText = "Delivery acknowledgement signature is invalid."
+                    }
+                case .staleTimestamp:
+                    await MainActor.run {
+                        isBusy = false
+                        statusText = "Delivery acknowledgement is stale."
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    isBusy = false
+                    statusText = "Delivery failed: \(error)"
+                }
+            }
+        }
+    }
+
+    private func monitorProgress(publisher: ClientControlPublisher, notBefore: Int64) async {
+        for _ in 0..<90 {
+            if Task.isCancelled { return }
+            if let frame = try? await publisher.fetchProgress(), frame.timestamp >= notBefore {
+                await MainActor.run { progress = frame }
+                switch frame.phase {
+                case .complete:
+                    await MainActor.run {
+                        isBusy = false
+                        preview = nil
+                        statusText = "Pump delivery confirmed."
+                    }
+                    return
+                case .cleared:
+                    await MainActor.run {
+                        isBusy = false
+                        statusText = "Delivery ended before completion. Verify the pump and master."
+                    }
+                    return
+                case .active:
+                    break
+                }
+            }
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+        }
+        await MainActor.run {
+            isBusy = false
+            statusText = "Master accepted the command, but final pump delivery was not confirmed."
+        }
+    }
+
+    private func stopDelivery() {
+        isBusy = true
+        Task {
+            let publisher = ClientControlPublisher(client: store.client, pairingStore: pairingStore)
+            do {
+                try await publisher.sendStopBolus()
+                await MainActor.run {
+                    isBusy = false
+                    statusText = "Stop request sent."
+                }
+            } catch {
+                await MainActor.run {
+                    isBusy = false
+                    statusText = "Stop request failed: \(error)"
+                }
+            }
+        }
+    }
+
     /// Matches the existing poll pattern in `ClientControlPairingView.sendPing()`.
     private func pollAck(publisher: ClientControlPublisher, counter: Int64) async throws -> ClientControlPublisher.AckResult {
-        for _ in 0..<5 {
+        for _ in 0..<10 {
             try await Task.sleep(nanoseconds: 1_000_000_000)
             let result = try await publisher.fetchAck(expectedCounter: counter)
             if case .pending = result { continue }

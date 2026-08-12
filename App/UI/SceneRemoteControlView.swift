@@ -104,13 +104,25 @@ struct SceneRemoteControlView: View {
         Task {
             let publisher = ClientControlPublisher(client: store.client, pairingStore: pairingStore)
             do {
-                try await publisher.sendSceneCommit(bolusId: bolusId)
-                try? await store.refresh()
+                let counter = try await publisher.sendSceneCommit(bolusId: bolusId)
+                let result = try await pollAck(publisher: publisher, counter: counter)
                 await MainActor.run {
                     isBusy = false
-                    preparedPreview = nil
-                    preparedSceneId = nil
-                    statusText = "Scene activated."
+                    switch result {
+                    case .terminal(.ok, _, _):
+                        preparedPreview = nil
+                        preparedSceneId = nil
+                        statusText = "Scene activation confirmed."
+                        Task { try? await store.refresh() }
+                    case .terminal(let status, let reason, _):
+                        statusText = "Activation \(status.rawValue.lowercased())\(reason.map { ": \($0)" } ?? "")."
+                    case .pending:
+                        statusText = "Activation was sent but not confirmed. Check the master before retrying."
+                    case .invalidSignature:
+                        statusText = "Activation acknowledgement signature is invalid."
+                    case .staleTimestamp:
+                        statusText = "Activation acknowledgement is stale."
+                    }
                 }
             } catch {
                 await MainActor.run {
@@ -131,7 +143,7 @@ struct SceneRemoteControlView: View {
                 try? await store.refresh()
                 await MainActor.run {
                     isBusy = false
-                    statusText = "Scene stopped."
+                    statusText = "Stop request sent."
                 }
             } catch {
                 await MainActor.run {
@@ -145,7 +157,7 @@ struct SceneRemoteControlView: View {
     /// Polls a few times with a short delay — the master's ack write isn't instant. Matches the
     /// existing pattern in `ClientControlPairingView.sendPing()`.
     private func pollAck(publisher: ClientControlPublisher, counter: Int64) async throws -> ClientControlPublisher.AckResult {
-        for _ in 0..<5 {
+        for _ in 0..<10 {
             try await Task.sleep(nanoseconds: 1_000_000_000)
             let result = try await publisher.fetchAck(expectedCounter: counter)
             if case .pending = result { continue }

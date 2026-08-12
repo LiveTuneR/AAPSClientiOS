@@ -173,3 +173,8 @@
 "settings.keepalive_normal" = "Normal";
 "settings.keepalive_aggressive" = "Aggressive";
 "settings.keepalive_caption" = "Normal polls in step with the sensor, about once every five minutes. Aggressive polls every minute for the freshest data and uses noticeably more battery. Off stops background updates entirely; data refreshes only when you open the app.";
+"settings.watch" = "Apple Watch";
+"settings.calendar_bridge" = "Calendar fallback";
+"settings.calendar_access" = "Calendar access";
+"diagnostics.title" = "Delivery diagnostics";
+"diagnostics.empty" = "No delivery events";

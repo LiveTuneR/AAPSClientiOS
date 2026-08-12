@@ -1,6 +1,12 @@
 import Foundation
 
 final class ClientControlPublisher {
+    static let roundTripTTL: Int64 = 8_000
+    static let pumpRoundTripTTL: Int64 = 60_000
+    static let pingTTL: Int64 = 10_000
+    static let fireAndForgetTTL: Int64 = 5 * 60 * 1_000
+    static let documentDate: Int64 = 946_684_800_001
+
     enum PublishError: Error {
         case notPaired
         case signingFailed
@@ -29,7 +35,8 @@ final class ClientControlPublisher {
             type: ClientControlMessage.Ping.type,
             payload: ClientControlMessage.Ping(),
             identifierPrefix: "aaps_clientcontrol_cmd_ping_",
-            wantsAck: true
+            wantsAck: true,
+            ttlMs: Self.pingTTL
         )
     }
 
@@ -39,7 +46,8 @@ final class ClientControlPublisher {
             type: ClientControlMessage.WizardPrepare.type,
             payload: inputs,
             identifierPrefix: "aaps_clientcontrol_cmd_wizard_prepare_",
-            wantsAck: true
+            wantsAck: true,
+            ttlMs: Self.roundTripTTL
         )
     }
 
@@ -49,7 +57,8 @@ final class ClientControlPublisher {
             type: ClientControlMessage.ScenePrepare.type,
             payload: ClientControlMessage.ScenePrepare(sceneId: sceneId, durationMinutes: durationMinutes),
             identifierPrefix: "aaps_clientcontrol_cmd_scene_prepare_",
-            wantsAck: true
+            wantsAck: true,
+            ttlMs: Self.roundTripTTL
         )
     }
 
@@ -59,7 +68,8 @@ final class ClientControlPublisher {
             type: ClientControlMessage.SceneCommit.type,
             payload: ClientControlMessage.SceneCommit(bolusId: bolusId),
             identifierPrefix: "aaps_clientcontrol_cmd_scene_commit_",
-            wantsAck: true
+            wantsAck: true,
+            ttlMs: Self.roundTripTTL
         )
     }
 
@@ -69,7 +79,79 @@ final class ClientControlPublisher {
             type: ClientControlMessage.SceneStop.type,
             payload: ClientControlMessage.SceneStop(triggerChain: triggerChain),
             identifierPrefix: "aaps_clientcontrol_cmd_scene_stop_",
-            wantsAck: true
+            wantsAck: false,
+            ttlMs: Self.fireAndForgetTTL
+        )
+    }
+
+    @discardableResult
+    func sendPreferencesUpdate(_ prefs: [String: PrefEntry]) async throws -> Int64 {
+        try await send(
+            type: ClientControlMessage.PreferencesUpdate.type,
+            payload: ClientControlMessage.PreferencesUpdate(prefs: prefs),
+            identifierPrefix: "aaps_clientcontrol_cmd_preferences_update_",
+            wantsAck: true,
+            ttlMs: Self.roundTripTTL
+        )
+    }
+
+    @discardableResult
+    func sendBolusPrepare(guid: String) async throws -> Int64 {
+        try await send(
+            type: ClientControlMessage.BolusPrepare.type,
+            payload: ClientControlMessage.BolusPrepare(guid: guid),
+            identifierPrefix: "aaps_clientcontrol_cmd_bolus_prepare_",
+            wantsAck: true,
+            ttlMs: Self.roundTripTTL
+        )
+    }
+
+    @discardableResult
+    func sendBatchPrepare(_ actions: [BatchActionDto]) async throws -> Int64 {
+        try await send(
+            type: ClientControlMessage.BatchPrepare.type,
+            payload: ClientControlMessage.BatchPrepare(actions: actions),
+            identifierPrefix: "aaps_clientcontrol_cmd_batch_prepare_",
+            wantsAck: true,
+            ttlMs: Self.roundTripTTL
+        )
+    }
+
+    @discardableResult
+    func sendBolusCommit(
+        bolusId: Int64,
+        asAdvisor: Bool = false,
+        correctionU: Double = 0,
+        pumpDirect: Bool = false
+    ) async throws -> Int64 {
+        try await send(
+            type: ClientControlMessage.BolusCommit.type,
+            payload: ClientControlMessage.BolusCommit(
+                bolusId: bolusId, asAdvisor: asAdvisor, correctionU: correctionU
+            ),
+            identifierPrefix: "aaps_clientcontrol_cmd_bolus_commit_",
+            wantsAck: true,
+            ttlMs: pumpDirect ? Self.pumpRoundTripTTL : Self.roundTripTTL
+        )
+    }
+
+    @discardableResult
+    func sendDismissAlarm() async throws -> Int64 {
+        try await send(
+            type: ClientControlMessage.DismissAlarm.type,
+            payload: ClientControlMessage.DismissAlarm(),
+            identifierPrefix: "aaps_clientcontrol_cmd_dismiss_alarm_",
+            ttlMs: Self.fireAndForgetTTL
+        )
+    }
+
+    @discardableResult
+    func sendStopBolus() async throws -> Int64 {
+        try await send(
+            type: ClientControlMessage.StopBolus.type,
+            payload: ClientControlMessage.StopBolus(),
+            identifierPrefix: "aaps_clientcontrol_cmd_stop_bolus_",
+            ttlMs: Self.fireAndForgetTTL
         )
     }
 
@@ -120,17 +202,44 @@ final class ClientControlPublisher {
         return .terminal(ack.status, reason: ack.reason, payload: ack.payload)
     }
 
+    func fetchProgress() async throws -> ProgressEnvelope? {
+        guard let pairing = pairingStore.currentPairing(),
+              let secret = ClientControlCrypto.hexToBytes(pairing.secretHex) else {
+            throw PublishError.notPaired
+        }
+        guard let document = try await client.fetchSettings(
+            identifier: "aaps_clientcontrol_progress_\(pairing.clientId)"
+        ), let data = document.runningConfigJson.data(using: .utf8),
+           let progress = try? JSONDecoder().decode(ProgressEnvelope.self, from: data),
+           progress.clientId == pairing.clientId else { return nil }
+        guard ClientControlCrypto.verify(
+            secret: secret, canonical: progress.canonicalString(), signature: progress.signature
+        ) else { return nil }
+        let date = Date(timeIntervalSince1970: Double(progress.timestamp) / 1_000)
+        guard ClientControlCrypto.timestampWithinSkew(date, now: Date()) else { return nil }
+        return progress
+    }
+
     @discardableResult
-    private func send<T: Encodable>(type: String, payload: T, identifierPrefix: String, wantsAck: Bool = false) async throws -> Int64 {
+    private func send<T: Encodable>(
+        type: String,
+        payload: T,
+        identifierPrefix: String,
+        wantsAck: Bool = false,
+        ttlMs: Int64 = ClientControlPublisher.fireAndForgetTTL
+    ) async throws -> Int64 {
         guard let pairing = pairingStore.currentPairing(),
               let secret = ClientControlCrypto.hexToBytes(pairing.secretHex) else {
             throw PublishError.notPaired
         }
 
-        let payloadData = try JSONEncoder().encode(payload)
-        guard let payloadJson = String(data: payloadData, encoding: .utf8) else {
+        let encodedPayload = try JSONEncoder().encode(payload)
+        guard var payloadObject = try JSONSerialization.jsonObject(with: encodedPayload) as? [String: Any] else {
             throw PublishError.signingFailed
         }
+        payloadObject["type"] = type
+        let payloadData = try JSONSerialization.data(withJSONObject: payloadObject, options: [.sortedKeys])
+        guard let payloadJson = String(data: payloadData, encoding: .utf8) else { throw PublishError.signingFailed }
 
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
         var envelope = SignedEnvelope(
@@ -140,7 +249,7 @@ final class ClientControlPublisher {
             type: type,
             payload: payloadJson,
             signature: "",
-            validUntil: nowMs + 5 * 60 * 1000,
+            validUntil: nowMs + ttlMs,
             wantsAck: wantsAck
         )
         envelope.signature = ClientControlCrypto.sign(secret: secret, canonical: envelope.canonicalString())
@@ -151,7 +260,7 @@ final class ClientControlPublisher {
         }
 
         let document: [String: Any] = [
-            "date": nowMs,
+            "date": Self.documentDate,
             "utcOffset": 0,
             "app": "AAPS",
             "schemaVersion": 1,

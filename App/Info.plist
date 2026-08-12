@@ -28,6 +28,10 @@
 	<true/>
 	<key>NSSupportsLiveActivitiesFrequentUpdates</key>
 	<true/>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>AAPSClient uses a dedicated calendar to mirror the latest glucose value to Apple Watch.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>AAPSClient uses a dedicated calendar to mirror the latest glucose value to Apple Watch.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

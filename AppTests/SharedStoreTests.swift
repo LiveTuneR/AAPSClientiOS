@@ -29,6 +29,33 @@ final class SharedStoreTests: XCTestCase {
         XCTAssertNil(makeStore().loadSnapshot())
     }
 
+    func test_snapshot_decodesLegacyDataWithoutHistory() throws {
+        let json = #"{"mgdl":120,"trend":"flat","delta":2,"date":0,"iob":1.2,"cob":10}"#
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        let snapshot = try decoder.decode(GlucoseSnapshot.self, from: Data(json.utf8))
+        XCTAssertEqual(snapshot.mgdl, 120)
+        XCTAssertEqual(snapshot.history, [])
+    }
+
+    func test_watchPayloadCarriesHistoryAndStaleness() {
+        let readingDate = Date(timeIntervalSince1970: 1_000)
+        let snapshot = GlucoseSnapshot(
+            mgdl: 123, trend: .fortyFiveUp, delta: 3, date: readingDate,
+            iob: 1.2, cob: 10,
+            history: [GlucoseSample(mgdl: 120, date: readingDate.addingTimeInterval(-300))]
+        )
+        let config = DisplayConfig(
+            units: .mmol,
+            thresholds: AlarmThresholds(urgentLow: 55, low: 70, high: 180, urgentHigh: 250, staleMinutes: 15)
+        )
+        let payload = WatchGlucosePayload(snapshot: snapshot, config: config, now: readingDate)
+        XCTAssertEqual(payload.history.count, 1)
+        XCTAssertEqual(payload.trendSymbol, "↗")
+        XCTAssertFalse(payload.isStale(at: readingDate.addingTimeInterval(899)))
+        XCTAssertTrue(payload.isStale(at: readingDate.addingTimeInterval(900)))
+    }
+
     func test_config_roundTrip() {
         let store = makeStore()
         let config = DisplayConfig(units: .mmol, thresholds: .defaults)

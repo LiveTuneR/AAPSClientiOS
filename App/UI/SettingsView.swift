@@ -30,6 +30,8 @@ struct SettingsView: View {
     @State private var glucoseNotificationOn: Bool
     @State private var announcementRelayOn: Bool
     @State private var iapsMasterModeOn: Bool
+    @State private var calendarBridgeOn: Bool
+    @State private var calendarStatus = ""
     @State private var eatingSoonTarget: String = ""
     @State private var eatingSoonDuration: String = ""
     @State private var activityTarget: String = ""
@@ -54,6 +56,7 @@ struct SettingsView: View {
         _glucoseNotificationOn = State(initialValue: store.isGlucoseNotificationEnabled)
         _announcementRelayOn = State(initialValue: store.isAnnouncementRelayEnabled)
         _iapsMasterModeOn = State(initialValue: store.isIapsMasterModeEnabled)
+        _calendarBridgeOn = State(initialValue: CalendarGlucoseBridge.isEnabled)
         let presets = store.ttPresets
         func fmt(_ mgdl: Int) -> String {
             isMmol ? String(format: "%.1f", Double(mgdl) / glucoseMmolFactor) : String(mgdl)
@@ -242,6 +245,21 @@ struct SettingsView: View {
                 Text("Scenes (Client Control)")
             }
 
+            Section("settings.watch") {
+                Toggle("settings.calendar_bridge", isOn: $calendarBridgeOn)
+                    .onChange(of: calendarBridgeOn) { enabled in
+                        Task { await configureCalendarBridge(enabled) }
+                    }
+                if !calendarStatus.isEmpty {
+                    LabeledContent("settings.calendar_access", value: calendarStatus)
+                }
+                NavigationLink {
+                    DeliveryDiagnosticsView()
+                } label: {
+                    Label("diagnostics.title", systemImage: "waveform.path.ecg")
+                }
+            }
+
             if #available(iOS 16.1, *) {
                 Section {
                     Toggle(String(localized: "settings.live_activity"), isOn: $liveActivityOn)
@@ -339,6 +357,16 @@ struct SettingsView: View {
         glucoseNotificationOn = store.isGlucoseNotificationEnabled
         announcementRelayOn = store.isAnnouncementRelayEnabled
         iapsMasterModeOn = store.isIapsMasterModeEnabled
+        calendarBridgeOn = CalendarGlucoseBridge.isEnabled
+        calendarStatus = CalendarGlucoseBridge.shared.authorizationDescription
+    }
+
+    @MainActor
+    private func configureCalendarBridge(_ enabled: Bool) async {
+        let effective = await CalendarGlucoseBridge.shared.setEnabled(enabled)
+        calendarStatus = CalendarGlucoseBridge.shared.authorizationDescription
+        if calendarBridgeOn != effective { calendarBridgeOn = effective }
+        if effective { store.updateSharedSnapshot(force: true) }
     }
 
     private func changeDisplayUnits(to units: GlucoseUnits) {
