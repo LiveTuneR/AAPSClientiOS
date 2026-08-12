@@ -69,7 +69,6 @@ targets:
       - path: WatchApp
       - path: WatchShared
       - path: Shared/Watch/WatchGlucosePayload.swift
-      - path: App/Assets.xcassets
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.nightaps.aapsclientios.watchapp
       PRODUCT_NAME: AAPSClient

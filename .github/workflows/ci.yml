@@ -25,7 +25,7 @@ jobs:
             -project AAPSClientiOS.xcodeproj \
             -scheme AAPSClientiOS \
             -destination 'generic/platform=iOS Simulator' \
-            CODE_SIGNING_ALLOWED=NO | xcpretty
+            CODE_SIGNING_ALLOWED=NO
       - name: Run unit tests
         run: |
           set -o pipefail
@@ -33,4 +33,4 @@ jobs:
             -project AAPSClientiOS.xcodeproj \
             -scheme AAPSClientiOSTests \
             -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
-            CODE_SIGNING_ALLOWED=NO | xcpretty
+            CODE_SIGNING_ALLOWED=NO
