@@ -31,22 +31,24 @@ struct DeliveryDiagnosticsView: View {
             }
         }
         .navigationTitle("diagnostics.title")
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+        .safeAreaInset(edge: .bottom) {
+            HStack(spacing: 24) {
                 ShareLink(item: DeliveryDiagnostics.shared.exportText()) {
-                    Image(systemName: "square.and.arrow.up")
+                    Label("Export", systemImage: "square.and.arrow.up")
                 }
                 .disabled(events.isEmpty)
-            }
-            ToolbarItem(placement: .topBarTrailing) {
                 Button(role: .destructive) {
                     DeliveryDiagnostics.shared.clear()
                     reload()
                 } label: {
-                    Image(systemName: "trash")
+                    Label("Clear", systemImage: "trash")
                 }
                 .disabled(events.isEmpty)
             }
+            .buttonStyle(.bordered)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity)
+            .background(.regularMaterial)
         }
         .onAppear(perform: reload)
     }
