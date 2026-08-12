@@ -32,5 +32,4 @@ jobs:
           xcodebuild test \
             -project AAPSClientiOS.xcodeproj \
             -scheme AAPSClientiOSTests \
-            -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
-            CODE_SIGNING_ALLOWED=NO
+            -destination 'platform=iOS Simulator,name=iPhone 16 Pro'
