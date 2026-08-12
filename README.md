@@ -19,11 +19,15 @@ Nightscout API v3. Мониторинг петли AAPS (глюкоза, IOB/COB
   - Care events
   - Управление режимом петли (open/closed/suspend)
 - Фоновое обновление (`BGAppRefreshTask`, ~5 мин) и локальные алармы по порогам глюкозы
+- Нативное watchOS-приложение и WidgetKit-компликации (значение, тренд, дельта, график)
+- Доставка на Apple Watch через live/context/background `WatchConnectivity` с подтверждениями
+- Опциональный календарный fallback и экспорт журнала доставки из настроек
 - Статистика (TIR, перцентили) за настраиваемый период
 
 ## Требования
 
 - iOS 16+
+- watchOS 10+ для приложения и компликаций Apple Watch
 - Работающий Nightscout с включённым API v3, подключённый к AndroidAPS
 - Access-токен Nightscout с нужной ролью:
   - `readable` — только мониторинг
@@ -88,6 +92,9 @@ JSON-ответы парсятся через `JSONSerialization`, а не `JSON
 
 Тесты используют fixture-based `NightscoutClient` и mock HTTP transport; JSON-фикстуры лежат
 в `AppTests/Fixtures/`.
+
+Статус реализации, ограничения фонового обновления и сценарий проверки на реальных устройствах
+описаны в [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md).
 
 ## Локализация
 
