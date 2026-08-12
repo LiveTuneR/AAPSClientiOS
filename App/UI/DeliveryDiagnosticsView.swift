@@ -6,10 +6,15 @@ struct DeliveryDiagnosticsView: View {
     var body: some View {
         List {
             if events.isEmpty {
-                ContentUnavailableView(
-                    "diagnostics.empty",
-                    systemImage: "waveform.path.ecg"
-                )
+                VStack(spacing: 8) {
+                    Image(systemName: "waveform.path.ecg")
+                        .font(.largeTitle)
+                        .foregroundStyle(.secondary)
+                    Text("diagnostics.empty")
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .listRowBackground(Color.clear)
             } else {
                 ForEach(events.reversed()) { event in
                     VStack(alignment: .leading, spacing: 3) {
