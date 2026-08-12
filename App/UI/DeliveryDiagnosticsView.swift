@@ -32,11 +32,13 @@ struct DeliveryDiagnosticsView: View {
         }
         .navigationTitle("diagnostics.title")
         .toolbar {
-            ToolbarItemGroup(placement: .topBarTrailing) {
+            ToolbarItem(placement: .topBarTrailing) {
                 ShareLink(item: DeliveryDiagnostics.shared.exportText()) {
                     Image(systemName: "square.and.arrow.up")
                 }
                 .disabled(events.isEmpty)
+            }
+            ToolbarItem(placement: .topBarTrailing) {
                 Button(role: .destructive) {
                     DeliveryDiagnostics.shared.clear()
                     reload()
